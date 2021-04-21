@@ -66,14 +66,19 @@ public abstract class CircuitBreaker {
     private final int memCBThreshold;
     private final boolean cpuCBEnabled;
     private final int cpuCBThreshold;
+    private final boolean loadAverageCBEnabled;
+    private final double loadAverageCBThreshold;
 
     public CircuitBreakerConfig(final boolean enabled, final boolean memCBEnabled, final int memCBThreshold,
-                                  final boolean cpuCBEnabled, final int cpuCBThreshold) {
+                                final boolean cpuCBEnabled, final int cpuCBThreshold,
+                                final boolean loadAverageCBEnabled, final double loadAverageCBThreshold) {
       this.enabled = enabled;
       this.memCBEnabled = memCBEnabled;
       this.memCBThreshold = memCBThreshold;
       this.cpuCBEnabled = cpuCBEnabled;
       this.cpuCBThreshold = cpuCBThreshold;
+      this.loadAverageCBEnabled = loadAverageCBEnabled;
+      this.loadAverageCBThreshold = loadAverageCBThreshold;
     }
 
     public boolean isEnabled() {
@@ -94,6 +99,14 @@ public abstract class CircuitBreaker {
 
     public int getCpuCBThreshold() {
       return cpuCBThreshold;
+    }
+
+    public boolean getLoadAverageCBEnabled() {
+      return loadAverageCBEnabled;
+    }
+
+    public double getLoadAverageCBThreshold() {
+      return loadAverageCBThreshold;
     }
   }
 }

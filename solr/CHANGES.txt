@@ -116,6 +116,9 @@ when told to. The admin UI now tells it to. (Nazerke Seidan, David Smiley)
 
 * SOLR-15322: Solr releases now contain everything needed to build runable docker images (Houston Putman, hossman)
 
+* SOLR-15056 Circuit Breakers: add circuit breaker for CPU utilization, use accurate name for load average
+ circuit breaker (Walter Underwood)
+
 Other Changes
 ----------------------
 * SOLR-14656: Autoscaling framework removed (Ishan Chattopadhyaya, noble, Ilan Ginzburg)

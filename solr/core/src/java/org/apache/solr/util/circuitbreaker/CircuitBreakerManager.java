@@ -23,6 +23,7 @@ import java.util.List;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.PluginInfo;
+import org.apache.solr.core.SolrCore;
 import org.apache.solr.util.plugin.PluginInfoInitialized;
 
 /**
@@ -40,12 +41,15 @@ import org.apache.solr.util.plugin.PluginInfoInitialized;
  * solution. There will be a follow up with a SIP for a schema API design.
  */
 public class CircuitBreakerManager implements PluginInfoInitialized {
+  private final SolrCore core;
+
   // Class private to potentially allow "family" of circuit breakers to be enabled or disabled
   private final boolean enableCircuitBreakerManager;
 
   private final List<CircuitBreaker> circuitBreakerList = new ArrayList<>();
 
-  public CircuitBreakerManager(final boolean enableCircuitBreakerManager) {
+  public CircuitBreakerManager(SolrCore core, final boolean enableCircuitBreakerManager) {
+    this.core = core;
     this.enableCircuitBreakerManager = enableCircuitBreakerManager;
   }
 
@@ -55,7 +59,7 @@ public class CircuitBreakerManager implements PluginInfoInitialized {
 
     // Install the default circuit breakers
     CircuitBreaker memoryCircuitBreaker = new MemoryCircuitBreaker(circuitBreakerConfig);
-    CircuitBreaker cpuCircuitBreaker = new CPUCircuitBreaker(circuitBreakerConfig);
+    CircuitBreaker cpuCircuitBreaker = new CPUCircuitBreaker(circuitBreakerConfig, core);
 
     register(memoryCircuitBreaker);
     register(cpuCircuitBreaker);
@@ -136,9 +140,9 @@ public class CircuitBreakerManager implements PluginInfoInitialized {
    * Any default circuit breakers should be registered here.
    */
   @SuppressWarnings({"rawtypes"})
-  public static CircuitBreakerManager build(PluginInfo pluginInfo) {
+  public static CircuitBreakerManager build(PluginInfo pluginInfo, SolrCore core) {
     boolean enabled = pluginInfo == null ? false : Boolean.parseBoolean(pluginInfo.attributes.getOrDefault("enabled", "false"));
-    CircuitBreakerManager circuitBreakerManager = new CircuitBreakerManager(enabled);
+    CircuitBreakerManager circuitBreakerManager = new CircuitBreakerManager(core, enabled);
 
     circuitBreakerManager.init(pluginInfo);
 
@@ -151,8 +155,11 @@ public class CircuitBreakerManager implements PluginInfoInitialized {
     boolean enabled = false;
     boolean cpuCBEnabled = false;
     boolean memCBEnabled = false;
+    boolean loadAverageCBEnabled = false;
     int memCBThreshold = 100;
     int cpuCBThreshold = 100;
+    // Load average value is bounded by the OS run queue max, but we don't know that limit
+    double loadAverageCBThreshold = Double.MAX_VALUE;
 
 
     if (pluginInfo != null) {
@@ -163,12 +170,17 @@ public class CircuitBreakerManager implements PluginInfoInitialized {
       if (args != null) {
         cpuCBEnabled = Boolean.parseBoolean(args._getStr("cpuEnabled", "false"));
         memCBEnabled = Boolean.parseBoolean(args._getStr("memEnabled", "false"));
+        loadAverageCBEnabled = Boolean.parseBoolean(args._getStr("loadAverageEnabled", "false"));
         memCBThreshold = Integer.parseInt(args._getStr("memThreshold", "100"));
         cpuCBThreshold = Integer.parseInt(args._getStr("cpuThreshold", "100"));
+        loadAverageCBThreshold = Double.parseDouble(args._getStr("loadAverageThreshold",
+                                                                 Double.toString(Double.MAX_VALUE)));
       }
     }
 
-    return new CircuitBreaker.CircuitBreakerConfig(enabled, memCBEnabled, memCBThreshold, cpuCBEnabled, cpuCBThreshold);
+    return new CircuitBreaker.CircuitBreakerConfig(enabled, memCBEnabled, memCBThreshold,
+                                                   cpuCBEnabled, cpuCBThreshold,
+                                                   loadAverageCBEnabled, loadAverageCBThreshold);
   }
 
   public boolean isEnabled() {

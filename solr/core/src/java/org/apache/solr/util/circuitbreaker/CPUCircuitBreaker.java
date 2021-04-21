@@ -18,9 +18,11 @@
 package org.apache.solr.util.circuitbreaker;
 
 import java.lang.invoke.MethodHandles;
-import java.lang.management.ManagementFactory;
-import java.lang.management.OperatingSystemMXBean;
 
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Metric;
+import org.apache.solr.core.SolrCore;
+import org.apache.solr.metrics.SolrMetricManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * <p>
  * Tracks current CPU usage and triggers if the specified threshold is breached.
  *
- * This circuit breaker gets the average CPU load over the last minute and uses
+ * This circuit breaker gets the recent average CPU usage and uses
  * that data to take a decision. We depend on OperatingSystemMXBean which does
  * not allow a configurable interval of collection of data.
  * //TODO: Use Codahale Meter to calculate the value locally.
@@ -41,22 +43,23 @@ import org.slf4j.LoggerFactory;
  */
 public class CPUCircuitBreaker extends CircuitBreaker {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
-  private static final OperatingSystemMXBean operatingSystemMXBean = ManagementFactory.getOperatingSystemMXBean();
 
   private final boolean enabled;
   private final double cpuUsageThreshold;
+  private final SolrCore core;
 
   // Assumption -- the value of these parameters will be set correctly before invoking getDebugInfo()
   private static final ThreadLocal<Double> seenCPUUsage = ThreadLocal.withInitial(() -> 0.0);
 
   private static final ThreadLocal<Double> allowedCPUUsage = ThreadLocal.withInitial(() -> 0.0);
 
-  public CPUCircuitBreaker(CircuitBreakerConfig config) {
+  public CPUCircuitBreaker(CircuitBreakerConfig config, SolrCore core) {
     super(config);
 
     this.enabled = config.getCpuCBEnabled();
     this.cpuUsageThreshold = config.getCpuCBThreshold();
-  }
+    this.core = core;
+ }
 
   @Override
   public boolean isTripped() {
@@ -110,6 +113,27 @@ public class CPUCircuitBreaker extends CircuitBreaker {
   }
 
   protected double calculateLiveCPUUsage() {
-    return operatingSystemMXBean.getSystemLoadAverage();
+    Metric metric = this.core
+        .getCoreContainer()
+        .getMetricManager()
+        .registry("solr.jvm")
+        .getMetrics()
+        .get("os.systemCpuLoad");
+
+    if (metric == null) {
+        return -1.0;
+    }
+
+    if (metric instanceof Gauge) {
+      @SuppressWarnings({"rawtypes"})
+          Gauge gauge = (Gauge) metric;
+      // unwrap if needed
+      if (gauge instanceof SolrMetricManager.GaugeWrapper) {
+        gauge = ((SolrMetricManager.GaugeWrapper) gauge).getGauge();
+      }
+      return ((Double) gauge.getValue()).doubleValue();
+    }
+
+    return -1.0;                // Unable to unpack metric
   }
 }
