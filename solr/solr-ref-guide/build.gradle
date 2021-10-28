@@ -22,7 +22,7 @@ buildscript {
     }
 
     dependencies {
-        classpath "org.asciidoctor:asciidoctorj:2.5.1"
+        classpath "org.asciidoctor:asciidoctorj:2.5.2"
     }
 }
 
