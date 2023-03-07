@@ -30,9 +30,11 @@ dependencies {
   implementation 'org.apache.tika:tika-core'
   implementation ('org.apache.tika:tika-parsers-standard-package', {
     exclude group: 'xml-apis', module: 'xml-apis'
+    exclude group: 'org.bouncycastle', module: 'bcutil-jdk18on'
   })
   implementation ('org.apache.tika:tika-parser-scientific-package', {
     exclude group: 'org.quartz-scheduler', module: 'quartz'
+    exclude group: 'edu.ucar', module: 'jj2000'
   })
   testImplementation project(':solr:test-framework')
   testImplementation 'org.apache.lucene:lucene-test-framework'
