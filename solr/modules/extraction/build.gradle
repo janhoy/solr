@@ -27,15 +27,8 @@ dependencies {
   implementation 'org.slf4j:slf4j-api'
 
   implementation 'commons-io:commons-io'
-  implementation 'org.apache.poi:poi'
-  implementation 'org.apache.poi:poi-ooxml'
   implementation 'org.apache.tika:tika-core'
-  implementation ('org.apache.tika:tika-parsers', {
-    exclude group: 'org.apache.cxf', module: 'cxf-rt-rs-client'
-    exclude group: 'org.quartz-scheduler', module: 'quartz'
-    exclude group: 'xml-apis', module: 'xml-apis'
-  })
-  implementation ('xerces:xercesImpl', {
+  implementation ('org.apache.tika:tika-parsers-standard-package', {
     exclude group: 'xml-apis', module: 'xml-apis'
   })
 
