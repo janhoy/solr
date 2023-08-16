@@ -51,7 +51,9 @@ public class JWTIssuerConfig {
   static final String PARAM_AUDIENCE = "aud";
   static final String PARAM_WELL_KNOWN_URL = "wellKnownUrl";
   static final String PARAM_AUTHORIZATION_ENDPOINT = "authorizationEndpoint";
+  static final String PARAM_TOKEN_ENDPOINT = "tokenEndpoint";
   static final String PARAM_CLIENT_ID = "clientId";
+  static final String PARAM_AUTHORIZATION_FLOW = "authorizationFlow";
 
   private static HttpsJwksFactory httpsJwksFactory = new HttpsJwksFactory(3600, 5000);
   private String iss;
@@ -64,6 +66,8 @@ public class JWTIssuerConfig {
   private WellKnownDiscoveryConfig wellKnownDiscoveryConfig;
   private String clientId;
   private String authorizationEndpoint;
+  private String tokenEndpoint;
+  private String authorizationFlow;
   private Collection<X509Certificate> trustedCerts;
 
   public static boolean ALLOW_OUTBOUND_HTTP =
@@ -117,6 +121,10 @@ public class JWTIssuerConfig {
       if (authorizationEndpoint == null) {
         authorizationEndpoint = wellKnownDiscoveryConfig.getAuthorizationEndpoint();
       }
+
+      if (tokenEndpoint == null) {
+        tokenEndpoint = wellKnownDiscoveryConfig.getTokenEndpoint();
+      }
     }
     if (iss == null && usesHttpsJwk() && !JWTAuthPlugin.PRIMARY_ISSUER.equals(name)) {
       throw new SolrException(
@@ -141,6 +149,8 @@ public class JWTIssuerConfig {
     setJwksUrl(confJwksUrl);
     setJsonWebKeySet(conf.get(PARAM_JWK));
     setAuthorizationEndpoint((String) conf.get(PARAM_AUTHORIZATION_ENDPOINT));
+    setTokenEndpoint((String) conf.get(PARAM_TOKEN_ENDPOINT));
+    setAuthorizationFlow((String) conf.get(PARAM_AUTHORIZATION_FLOW));
 
     conf.remove(PARAM_WELL_KNOWN_URL);
     conf.remove(PARAM_ISSUER);
@@ -150,6 +160,8 @@ public class JWTIssuerConfig {
     conf.remove(PARAM_JWKS_URL);
     conf.remove(PARAM_JWK);
     conf.remove(PARAM_AUTHORIZATION_ENDPOINT);
+    conf.remove(PARAM_TOKEN_ENDPOINT);
+    conf.remove(PARAM_AUTHORIZATION_FLOW);
 
     if (!conf.isEmpty()) {
       throw new SolrException(
@@ -315,6 +327,24 @@ public class JWTIssuerConfig {
     return this;
   }
 
+  public String getTokenEndpoint() {
+    return tokenEndpoint;
+  }
+
+  public JWTIssuerConfig setTokenEndpoint(String tokenEndpoint) {
+    this.tokenEndpoint = tokenEndpoint;
+    return this;
+  }
+
+  public String getAuthorizationFlow() {
+    return authorizationFlow;
+  }
+
+  public JWTIssuerConfig setAuthorizationFlow(String authorizationFlow) {
+    this.authorizationFlow = authorizationFlow;
+    return this;
+  }
+
   public Map<String, Object> asConfig() {
     HashMap<String, Object> config = new HashMap<>();
     putIfNotNull(config, PARAM_ISS_NAME, name);
@@ -324,6 +354,8 @@ public class JWTIssuerConfig {
     putIfNotNull(config, PARAM_WELL_KNOWN_URL, wellKnownUrl);
     putIfNotNull(config, PARAM_CLIENT_ID, clientId);
     putIfNotNull(config, PARAM_AUTHORIZATION_ENDPOINT, authorizationEndpoint);
+    putIfNotNull(config, PARAM_TOKEN_ENDPOINT, tokenEndpoint);
+    putIfNotNull(config, PARAM_AUTHORIZATION_FLOW, authorizationFlow);
     if (jsonWebKeySet != null) {
       putIfNotNull(config, PARAM_JWK, jsonWebKeySet.getJsonWebKeys());
     }

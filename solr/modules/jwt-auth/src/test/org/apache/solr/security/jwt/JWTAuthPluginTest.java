@@ -519,6 +519,8 @@ public class JWTAuthPluginTest extends SolrTestCaseJ4 {
   public void xSolrAuthDataHeader() {
     testConfig.put("adminUiScope", "solr:admin");
     testConfig.put("authorizationEndpoint", "http://acmepaymentscorp/oauth/auz/authorize");
+    testConfig.put("tokenEndpoint", "http://acmepaymentscorp/oauth/oauth20/token");
+    testConfig.put("authorizationFlow", "code_pkce");
     testConfig.put("clientId", "solr-cluster");
     plugin.init(testConfig);
     String headerBase64 = plugin.generateAuthDataHeader();
@@ -528,6 +530,8 @@ public class JWTAuthPluginTest extends SolrTestCaseJ4 {
     assertEquals("solr:admin", parsed.get("scope"));
     assertEquals(
         "http://acmepaymentscorp/oauth/auz/authorize", parsed.get("authorizationEndpoint"));
+    assertEquals("http://acmepaymentscorp/oauth/oauth20/token", parsed.get("tokenEndpoint"));
+    assertEquals("code_pkce", parsed.get("authorization_flow"));
     assertEquals("solr-cluster", parsed.get("client_id"));
   }
 

@@ -130,7 +130,9 @@ public class JWTAuthPlugin extends AuthenticationPlugin
           JWTIssuerConfig.PARAM_CLIENT_ID,
           JWTIssuerConfig.PARAM_WELL_KNOWN_URL,
           JWTIssuerConfig.PARAM_AUDIENCE,
-          JWTIssuerConfig.PARAM_AUTHORIZATION_ENDPOINT);
+          JWTIssuerConfig.PARAM_AUTHORIZATION_ENDPOINT,
+          JWTIssuerConfig.PARAM_TOKEN_ENDPOINT,
+          JWTIssuerConfig.PARAM_AUTHORIZATION_FLOW);
 
   private JwtConsumer jwtConsumer;
   private boolean requireExpirationTime;
@@ -336,6 +338,8 @@ public class JWTAuthPlugin extends AuthenticationPlugin
               .setJwksUrl(conf.get(JWTIssuerConfig.PARAM_JWKS_URL))
               .setAuthorizationEndpoint(
                   (String) conf.get(JWTIssuerConfig.PARAM_AUTHORIZATION_ENDPOINT))
+              .setTokenEndpoint((String) conf.get(JWTIssuerConfig.PARAM_TOKEN_ENDPOINT))
+              .setAuthorizationFlow((String) conf.get(JWTIssuerConfig.PARAM_AUTHORIZATION_FLOW))
               .setClientId((String) conf.get(JWTIssuerConfig.PARAM_CLIENT_ID))
               .setWellKnownUrl((String) conf.get(JWTIssuerConfig.PARAM_WELL_KNOWN_URL));
       if (conf.get(JWTIssuerConfig.PARAM_JWK) != null) {
@@ -847,9 +851,11 @@ public class JWTAuthPlugin extends AuthenticationPlugin
     Map<String, Object> data = new HashMap<>();
     data.put(
         JWTIssuerConfig.PARAM_AUTHORIZATION_ENDPOINT, primaryIssuer.getAuthorizationEndpoint());
+    data.put(JWTIssuerConfig.PARAM_TOKEN_ENDPOINT, primaryIssuer.getTokenEndpoint());
     data.put("client_id", primaryIssuer.getClientId());
     data.put("scope", adminUiScope);
     data.put("redirect_uris", redirectUris);
+    data.put("authorization_flow", primaryIssuer.getAuthorizationFlow());
     String headerJson = Utils.toJSONString(data);
     return Base64.getEncoder().encodeToString(headerJson.getBytes(StandardCharsets.UTF_8));
   }
