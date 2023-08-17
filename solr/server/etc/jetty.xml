@@ -90,6 +90,7 @@
       <Set name="originalPathAttribute">requestedPath</Set>
 
       <!-- security-related headers -->
+<!-- TODO: SOLR-16896 - csp is now set from Java backend
       <Call name="addRule">
         <Arg>
           <New class="org.eclipse.jetty.rewrite.handler.HeaderPatternRule">
@@ -99,6 +100,7 @@
           </New>
         </Arg>
       </Call>
+-->
       <Call name="addRule">
         <Arg>
           <New class="org.eclipse.jetty.rewrite.handler.HeaderPatternRule">

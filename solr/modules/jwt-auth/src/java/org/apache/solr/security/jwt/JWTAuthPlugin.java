@@ -19,6 +19,7 @@ package org.apache.solr.security.jwt;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -63,6 +64,7 @@ import org.apache.solr.security.AuthenticationPlugin;
 import org.apache.solr.security.ConfigEditablePlugin;
 import org.apache.solr.security.jwt.JWTAuthPlugin.JWTAuthenticationResponse.AuthCode;
 import org.apache.solr.security.jwt.api.ModifyJWTAuthPluginConfigAPI;
+import org.apache.solr.servlet.LoadAdminUiServlet;
 import org.apache.solr.util.CryptoKeys;
 import org.eclipse.jetty.client.api.Request;
 import org.jose4j.jwa.AlgorithmConstraints;
@@ -282,8 +284,22 @@ public class JWTAuthPlugin extends AuthenticationPlugin
     }
 
     initConsumer();
+    registerTokenEndpointForCsp();
 
     lastInitTime = Instant.now();
+  }
+
+  /** Record Issuer URL as a system property, so it can be picked up and sent to Admin UI as CSP */
+  private void registerTokenEndpointForCsp() {
+    final String syspropName = LoadAdminUiServlet.SYSPROP_CSP_HOSTS_PREFIX + ".jwt";
+    String url = !issuerConfigs.isEmpty() ? getPrimaryIssuer().getTokenEndpoint() : null;
+    if (url != null) {
+      URI uri = URI.create(url);
+      System.setProperty(
+          syspropName, String.format(Locale.ROOT, "%s://%s:*", uri.getScheme(), uri.getHost()));
+    } else {
+      System.clearProperty(syspropName);
+    }
   }
 
   /**

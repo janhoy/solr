@@ -16,11 +16,13 @@
  */
 package org.apache.solr.servlet;
 
+import com.google.common.net.HttpHeaders;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.util.stream.Collectors;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.io.output.CloseShieldOutputStream;
@@ -37,6 +39,8 @@ public final class LoadAdminUiServlet extends BaseSolrServlet {
   // check system properties for whether or not admin UI is disabled, default is false
   private static final boolean disabled =
       Boolean.parseBoolean(System.getProperty("disableAdminUI", "false"));
+  // Any system property that starts with this prefix will be added to the CSP connect-src
+  public static final String SYSPROP_CSP_HOSTS_PREFIX = "solr.ui.csp.hosts";
 
   @Override
   public void doGet(HttpServletRequest _request, HttpServletResponse _response) throws IOException {
@@ -60,6 +64,12 @@ public final class LoadAdminUiServlet extends BaseSolrServlet {
       if (in != null && cores != null) {
         response.setCharacterEncoding("UTF-8");
         response.setContentType("text/html");
+        String connectSrc = generateCspConnectSrc();
+        response.setHeader(
+            HttpHeaders.CONTENT_SECURITY_POLICY,
+            "default-src 'none'; base-uri 'none'; connect-src "
+                + connectSrc
+                + "; form-action 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self';");
 
         // We have to close this to flush OutputStreamWriter buffer
         try (Writer out =
@@ -75,5 +85,19 @@ public final class LoadAdminUiServlet extends BaseSolrServlet {
         response.sendError(404);
       }
     }
+  }
+
+  /**
+   * Iterate all system properties with prefix {@link #SYSPROP_CSP_HOSTS_PREFIX} and concatenate
+   * them into a space separated string that can be use in CSP
+   */
+  private String generateCspConnectSrc() {
+    var props =
+        System.getProperties().keySet().stream()
+            .filter(k -> k instanceof String && ((String) k).startsWith(SYSPROP_CSP_HOSTS_PREFIX))
+            .map(key -> System.getProperty((String) key))
+            .collect(Collectors.toList());
+    props.add("'self'");
+    return String.join(" ", props);
   }
 }
