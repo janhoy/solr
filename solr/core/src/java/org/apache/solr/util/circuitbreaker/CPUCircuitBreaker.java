@@ -30,10 +30,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>This circuit breaker gets the recent average CPU usage and uses that data to take a decision.
  * We depend on OperatingSystemMXBean which does not allow a configurable interval of collection of
- * data. //TODO: Use Codahale Meter to calculate the value locally.
- *
- * <p>The configuration to define which mode to use and the trigger threshold are defined in
- * solrconfig.xml
+ * data.
  */
 public class CPUCircuitBreaker extends CircuitBreaker {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
@@ -111,6 +108,7 @@ public class CPUCircuitBreaker extends CircuitBreaker {
 
   @SuppressWarnings("rawtypes")
   protected double calculateLiveCPUUsage() {
+    // TODO: Use Codahale Meter to calculate the value
     Metric metric =
         this.core
             .getCoreContainer()
