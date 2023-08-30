@@ -55,11 +55,17 @@ Consider the following example:
 JVM has been allocated a maximum heap of 5GB (-Xmx) and `threshold` is set to `75`.
 In this scenario, the heap usage at which the circuit breaker will trip is 3.75GB.
 
-=== CPU Utilization
+=== System CPU Usage Circuit Breaker
+This circuit breaker tracks system CPU usage and triggers if the recent CPU usage exceeds a configurable threshold.
 
-This circuit breaker tracks CPU utilization and triggers if the average CPU utilization over the last one minute exceeds a configurable threshold.
-Note that the value used in computation is over the last one minute -- so a sudden spike in traffic that goes down might still cause the circuit breaker to trigger for a short while before it resolves and updates the value.
-For more details of the calculation, please see https://en.wikipedia.org/wiki/Load_(computing)
+This is tracked with the JMX metric `OperatingSystemMXBean.getSystemCpuLoad()`. That measures the
+recent CPU usage for the whole system. A value of 0.0 means that all CPUs were idle, while a value
+of 1.0 means that all CPUs were actively running 100% of the time.
+
+This metric is provided by the `com.sun.management` package, which is not implemented on all JVMs.
+If the metric is not available, the circuit breaker will fail with the warning "Unable to get CPU usage".
+
+For the circuit breaker configuration, a value of "0" maps to 0% usage and a value of "100" maps to 100% usage.
 
 To enable and configure the CPU utilization based circuit breaker:
 
@@ -70,7 +76,30 @@ To enable and configure the CPU utilization based circuit breaker:
 </circuitBreaker>
 ----
 
-The `threshold` is defined in units of CPU utilization.
+The triggering threshold is defined in percent CPU usage. A value of "0" maps to 0% usage
+and a value of "100" maps to 100% usage.  The example above will trip when the CPU usage is
+equal to or greater than 75%:.
+
+=== System Load Average Circuit Breaker
+This circuit breaker tracks system load average and triggers if the recent load average exceeds a configurable threshold.
+
+This is tracked with the JMX metric `OperatingSystemMXBean.getSystemLoadAverage()`. That measures the
+recent load average for the whole system. A "load average" is the number of processes using or waiting for a CPU,
+usually averaged over one minute. Some systems include processes waiting on IO in the load average. Check the
+documentation for your system and JVM to understand this metric. For more information, see the
+https://en.wikipedia.org/wiki/Load_(computing)[Wikipedia page for Load],
+
+To enable and configure the CPU utilization based circuit breaker:
+
+[source,xml]
+----
+<circuitBreaker class="org.apache.solr.util.circuitbreaker.LoadAverageCircuitBreaker">
+ <double  name="threshold">8.0</double>
+</circuitBreaker>
+----
+
+The triggering threshold is a floating point number matching load average.
+The example circuit breaker above will trip when the load average is equal to or greater than 8.0.
 
 == Performance Considerations
 
