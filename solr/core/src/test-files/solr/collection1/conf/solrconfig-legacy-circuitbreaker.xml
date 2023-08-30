@@ -86,8 +86,6 @@
     <str name="memThreshold">75</str>
     <str name="cpuEnabled">true</str>
     <str name="cpuThreshold">75</str>
-    <str name="loadAverageEnabled">true</str>
-    <str name="loadAverageThreshold">4</str>
   </circuitBreaker>
 
   <initParams path="/select">

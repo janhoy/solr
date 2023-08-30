@@ -36,7 +36,7 @@ public class CircuitBreakerManager extends CircuitBreaker {
   private int memThreshold = 100;
   private int cpuThreshold = 100;
   private MemoryCircuitBreaker memCB;
-  private CPUCircuitBreaker cpuCB;
+  private LoadAverageCircuitBreaker cpuCB;
 
   public CircuitBreakerManager() {
     super();
@@ -86,7 +86,8 @@ public class CircuitBreakerManager extends CircuitBreaker {
       memCB.setThreshold(memThreshold);
     }
     if (cpuEnabled) {
-      cpuCB = new CPUCircuitBreaker();
+      // In SOLR-15056 CPUCircuitBreaker was renamed to LoadAverageCircuitBreaker, need back-compat
+      cpuCB = new LoadAverageCircuitBreaker();
       cpuCB.setThreshold(cpuThreshold);
     }
   }
