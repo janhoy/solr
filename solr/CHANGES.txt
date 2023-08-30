@@ -70,7 +70,9 @@ Other Changes
 ==================  9.4.0 ==================
 New Features
 ---------------------
-(No changes)
+* SOLR-15056: A new Circuit breaker for percentage of CPU utilization is added. The former "CPU" circuit breaker is now more correctly named
+  LoadAverageCircuitBreaker as it trips on system load average which is not a percentage. Users of legacy CircuitBreakerManager are not affected by this change.
+  (Walter Underwood,  janhoy)
 
 Improvements
 ---------------------
@@ -1539,9 +1541,6 @@ Deprecation Removals
 * SOLR-12336: Remove Filter, SolrFilter and SolrConstantScoreQuery. Filter no longer has a need to exist due to multiple
   JIRA issues, implemented by a number of issues. With Filter going away, there is no longer need for
   SolrConstantScoreQuery. (Collins Abanda, Mike Drob, Tim Potter, David Smiley, Michael Gibney)
-
-* SOLR-15056 Circuit Breakers: add circuit breaker for CPU utilization, use accurate name for load average
- circuit breaker (Walter Underwood)
 
 Other Changes
 ----------------------
