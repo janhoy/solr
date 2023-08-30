@@ -28,11 +28,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>This circuit breaker gets the load average (length of the run queue) over the last minute and
  * uses that data to take a decision. We depend on OperatingSystemMXBean which does not allow a
- * configurable interval of collection of data. //TODO: Use Codahale Meter to calculate the value
- * locally.
- *
- * <p>The configuration to define which mode to use and the trigger threshold are defined in
- * solrconfig.xml
+ * configurable interval of collection of data.
  */
 public class LoadAverageCircuitBreaker extends CircuitBreaker {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
