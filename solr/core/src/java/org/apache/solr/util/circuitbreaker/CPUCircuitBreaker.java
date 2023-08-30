@@ -78,7 +78,7 @@ public class CPUCircuitBreaker extends CircuitBreaker {
   @Override
   public String getDebugInfo() {
 
-    if (seenCPUUsage.get() == 0.0 || seenCPUUsage.get() == 0.0) {
+    if (seenCPUUsage.get() == 0.0 || allowedCPUUsage.get() == 0.0) {
       log.warn("CPUCircuitBreaker's monitored values (seenCPUUSage, allowedCPUUsage) not set");
     }
 
@@ -109,6 +109,7 @@ public class CPUCircuitBreaker extends CircuitBreaker {
     return cpuUsageThreshold;
   }
 
+  @SuppressWarnings("rawtypes")
   protected double calculateLiveCPUUsage() {
     Metric metric =
         this.core
