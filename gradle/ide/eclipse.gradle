@@ -27,10 +27,12 @@ configure(rootProject) {
 
   eclipse {
     project {
-      name = "Apache Lucene Solr ${version}"
+      name = "Apache Solr ${version}"
     }
 
     classpath {
+      downloadSources = true
+      downloadJavadoc = true
       defaultOutputDir = file('build/eclipse')
 
       file {

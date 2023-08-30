@@ -1,5 +1,5 @@
 <div>
-  <a href="http://lucene.apache.org/solr/">
+  <a href="https://solr.apache.org/">
     <img src="solr.svg" style="width:210px; margin:22px 0px 7px 20px; border:none;" title="Apache Solr Logo" alt="Solr" />
   </a>
   <div style="z-index:100;position:absolute;top:25px;left:226px">
@@ -28,7 +28,7 @@ This is the official documentation for **Apache Solr ${project.version}**.
 * [Reference Guide](${project.solrRefguideUrl}/): The main documentation for Solr
 * [Changes](changes/Changes.html): List of changes in this release
 * [System Requirements](SYSTEM_REQUIREMENTS.html): Minimum and supported Java versions
-* [Solr Tutorial](${project.solrRefguideUrl}/solr-tutorial.html):
+* [Solr Tutorial](${project.solrRefguideUrl}/getting-started/solr-tutorial.html):
   This document covers the basics of running Solr using an example schema, and some sample data
 * [Lucene Documentation](${project.luceneDocUrl}/index.html)
   

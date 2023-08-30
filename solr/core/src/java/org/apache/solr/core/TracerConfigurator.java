@@ -17,54 +17,30 @@
 
 package org.apache.solr.core;
 
-import java.lang.invoke.MethodHandles;
-
-import io.opentracing.Tracer;
-import io.opentracing.noop.NoopTracerFactory;
-import org.apache.solr.common.cloud.ZkStateReader;
+import io.opentelemetry.api.trace.Tracer;
 import org.apache.solr.util.plugin.NamedListInitializedPlugin;
-import org.apache.solr.util.tracing.GlobalTracer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.solr.util.tracing.SimplePropagator;
+import org.apache.solr.util.tracing.TraceUtils;
 
+/** Produces a {@link Tracer} from configuration. */
 public abstract class TracerConfigurator implements NamedListInitializedPlugin {
-  private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
-  public abstract Tracer getTracer();
+  public static final boolean TRACE_ID_GEN_ENABLED =
+      Boolean.parseBoolean(System.getProperty("solr.alwaysOnTraceId", "true"));
 
-  public static void loadTracer(SolrResourceLoader loader, PluginInfo info, ZkStateReader stateReader) {
-    if (info == null) {
-      // in case of a Tracer is registered to OpenTracing through javaagent
-      if (io.opentracing.util.GlobalTracer.isRegistered()) {
-        GlobalTracer.setup(io.opentracing.util.GlobalTracer.get());
-        registerListener(stateReader);
-      } else {
-        GlobalTracer.setup(NoopTracerFactory.create());
-        GlobalTracer.get().setSamplePercentage(0.0);
-      }
-    } else {
-      TracerConfigurator configurator = loader
-          .newInstance(info.className, TracerConfigurator.class);
+  public static Tracer loadTracer(SolrResourceLoader loader, PluginInfo info) {
+    if (info != null && info.isEnabled()) {
+      TracerConfigurator configurator =
+          loader.newInstance(info.className, TracerConfigurator.class);
       configurator.init(info.initArgs);
+      return configurator.getTracer();
 
-      GlobalTracer.setup(configurator.getTracer());
-      registerListener(stateReader);
+    } else if (TRACE_ID_GEN_ENABLED) {
+      return SimplePropagator.load();
+    } else {
+      return TraceUtils.noop();
     }
   }
 
-  private static void registerListener(ZkStateReader stateReader) {
-    stateReader.registerClusterPropertiesListener(properties -> {
-      if (properties.containsKey(ZkStateReader.SAMPLE_PERCENTAGE)) {
-        try {
-          double sampleRate = Double.parseDouble(properties.get(ZkStateReader.SAMPLE_PERCENTAGE).toString());
-          GlobalTracer.get().setSamplePercentage(sampleRate);
-        } catch (NumberFormatException e) {
-          log.error("Unable to set sample rate", e);
-        }
-      } else {
-        GlobalTracer.get().setSamplePercentage(0.1);
-      }
-      return false;
-    });
-  }
+  protected abstract Tracer getTracer();
 }

@@ -16,22 +16,19 @@
  */
 package org.apache.solr.client.solrj.impl;
 
-import java.io.ByteArrayOutputStream;
+import static org.apache.solr.common.params.CommonParams.JAVABIN_MIME;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Collection;
-
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.request.JavaBinUpdateRequestCodec;
 import org.apache.solr.client.solrj.request.RequestWriter;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.common.util.ContentStream;
 
-import static org.apache.solr.common.params.CommonParams.JAVABIN_MIME;
-
 /**
  * A RequestWriter which writes requests in the javabin format
- *
  *
  * @see org.apache.solr.client.solrj.request.RequestWriter
  * @since solr 1.4
@@ -39,7 +36,7 @@ import static org.apache.solr.common.params.CommonParams.JAVABIN_MIME;
 public class BinaryRequestWriter extends RequestWriter {
 
   @Override
-  public ContentWriter getContentWriter(@SuppressWarnings({"rawtypes"})SolrRequest req) {
+  public ContentWriter getContentWriter(SolrRequest<?> req) {
     if (req instanceof UpdateRequest) {
       UpdateRequest updateRequest = (UpdateRequest) req;
       if (isEmpty(updateRequest)) return null;
@@ -60,16 +57,15 @@ public class BinaryRequestWriter extends RequestWriter {
   }
 
   @Override
-  public Collection<ContentStream> getContentStreams(@SuppressWarnings({"rawtypes"})SolrRequest req) throws IOException {
+  public Collection<ContentStream> getContentStreams(SolrRequest<?> req) throws IOException {
     if (req instanceof UpdateRequest) {
       UpdateRequest updateRequest = (UpdateRequest) req;
-      if (isEmpty(updateRequest) ) return null;
+      if (isEmpty(updateRequest)) return null;
       throw new RuntimeException("This Should not happen");
     } else {
       return super.getContentStreams(req);
     }
   }
-
 
   @Override
   public String getUpdateContentType() {
@@ -77,19 +73,10 @@ public class BinaryRequestWriter extends RequestWriter {
   }
 
   @Override
-  public void write(@SuppressWarnings({"rawtypes"})SolrRequest request, OutputStream os) throws IOException {
+  public void write(SolrRequest<?> request, OutputStream os) throws IOException {
     if (request instanceof UpdateRequest) {
       UpdateRequest updateRequest = (UpdateRequest) request;
       new JavaBinUpdateRequestCodec().marshal(updateRequest, os);
-    }
-  }
-  
-  /*
-   * A hack to get access to the protected internal buffer and avoid an additional copy
-   */
-  public static class BAOS extends ByteArrayOutputStream {
-    public byte[] getbuf() {
-      return super.buf;
     }
   }
 }

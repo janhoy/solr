@@ -17,39 +17,33 @@
 package org.apache.solr.client.solrj.request.beans;
 
 public class V2ApiConstants {
-    private V2ApiConstants() { /* Private ctor prevents instantiation */ }
+  private V2ApiConstants() {
+    /* Private ctor prevents instantiation */
+  }
 
-    /**
-     * Parent key for collection or alias properties to set.
-     */
-    public static final String PROPERTIES_KEY = "properties";
-    /**
-     * Parent key for v2 params used to create a collection.
-     */
-    public static final String CREATE_COLLECTION_KEY = "create-collection";
+  /** Parent key for collection or alias properties to set. */
+  public static final String PROPERTIES_KEY = "properties";
+  /** Parent key for v2 params used to create a collection. */
+  public static final String CREATE_COLLECTION_KEY = "create-collection";
 
-    /**
-     * Parent key holding alias-router parameters.
-     */
-    public static final String ROUTER_KEY = "router";
+  /** Parent key holding alias-router parameters. */
+  public static final String ROUTER_KEY = "router";
 
-    /**
-     * Parameter name for the configset used by a collection
-     */
-    public static final String CONFIG = "config";
+  /** Parameter name for the configset used by a collection */
+  public static final String CONFIG = "config";
 
-    /**
-     * Property controlling whether 'nodeSet' should be shuffled before use.
-     */
-    public static final String SHUFFLE_NODES = "shuffleNodes";
+  /** Parameter for explicitly providing a name for each shard during collection creation. */
+  public static final String SHARD_NAMES = "shardNames";
 
-    /**
-     * The set of nodes to consider as potential locations for a new collection or its constituent components.
-     */
-    public static final String NODE_SET = "nodeSet";
+  /** Property controlling whether 'nodeSet' should be shuffled before use. */
+  public static final String SHUFFLE_NODES = "shuffleNodes";
 
-    /**
-     * The collections to be included in an alias.
-     */
-    public static final String COLLECTIONS = "collections";
+  /**
+   * The set of nodes to consider as potential locations for a new collection or its constituent
+   * components.
+   */
+  public static final String NODE_SET = "nodeSet";
+
+  /** The collections to be included in an alias. */
+  public static final String COLLECTIONS = "collections";
 }

@@ -27,6 +27,10 @@ grant {
   // system jar resources
   permission java.io.FilePermission "${java.home}${/}-", "read";
 
+  // tmpdir
+  permission java.io.FilePermission "${java.io.tmpdir}", "read,write";
+  permission java.io.FilePermission "${java.io.tmpdir}${/}-", "read,write,delete";
+
   // Test launchers (randomizedtesting, etc.)
   permission java.io.FilePermission "${junit4.childvm.cwd}", "read";
   permission java.io.FilePermission "${junit4.childvm.cwd}${/}temp", "read,write,delete";
@@ -54,7 +58,7 @@ grant {
   permission java.net.SocketPermission "[::1]:4", "connect,resolve";
   permission java.net.SocketPermission "[::1]:6", "connect,resolve";
   permission java.net.SocketPermission "[::1]:8", "connect,resolve";
-  
+
   // Basic permissions needed for Lucene to work:
   permission java.util.PropertyPermission "*", "read,write";
 
@@ -106,13 +110,12 @@ grant {
   permission java.lang.RuntimePermission "writeFileDescriptor";
   // needed by hadoop http
   permission java.lang.RuntimePermission "getProtectionDomain";
+  // needed by aws s3 sdk (Apache HTTP Client)
+  permission java.lang.RuntimePermission "accessClassInPackage.jdk.internal.reflect";
 
   // These two *have* to be spelled out a separate
   permission java.lang.management.ManagementPermission "control";
   permission java.lang.management.ManagementPermission "monitor";
-
-  // needed by hadoop htrace
-  permission java.net.NetPermission "getNetworkInformation";
 
   // needed by DIH - possibly even after DIH is a package
   permission java.sql.SQLPermission "deregisterDriver";
@@ -146,6 +149,9 @@ grant {
   permission java.security.SecurityPermission "putProviderProperty.SaslPlainServer";
   permission java.security.SecurityPermission "insertProvider";
 
+  // Needed by JWT integration tests & S3 clients
+  permission java.lang.RuntimePermission "setFactory";
+
   permission javax.xml.bind.JAXBPermission "setDatatypeConverter";
 
   // SSL related properties for Solr tests
@@ -153,20 +159,24 @@ grant {
 
   // SASL/Kerberos related properties for Solr tests
   permission javax.security.auth.PrivateCredentialPermission "javax.security.auth.kerberos.KerberosTicket * \"*\"", "read";
-  
+
   // may only be necessary with Java 7?
   permission javax.security.auth.PrivateCredentialPermission "javax.security.auth.kerberos.KeyTab * \"*\"", "read";
   permission javax.security.auth.PrivateCredentialPermission "sun.security.jgss.krb5.Krb5Util$KeysFromKeyTab * \"*\"", "read";
-  
+
   permission javax.security.auth.kerberos.ServicePermission "*", "initiate";
   permission javax.security.auth.kerberos.ServicePermission "*", "accept";
   permission javax.security.auth.kerberos.DelegationPermission "\"*\" \"krbtgt/EXAMPLE.COM@EXAMPLE.COM\"";
-  
+
   // java 8 accessibility requires this perm - should not after 8 I believe (rrd4j is the root reason we hit an accessibility code path)
   permission java.awt.AWTPermission "*";
 
   // used by solr to create sandboxes (e.g. script execution)
   permission java.security.SecurityPermission "createAccessControlContext";
+
+  // for Apache HttpClient useSystemProperties
+  permission java.net.NetPermission "getProxySelector";
+  permission java.net.NetPermission "requestPasswordAuthentication";
 };
 
 // additional permissions based on system properties set by /bin/solr
@@ -175,14 +185,18 @@ grant {
   permission java.io.FilePermission "${hadoop.security.credential.provider.path}", "read,write,delete,readlink";
   permission java.io.FilePermission "${hadoop.security.credential.provider.path}${/}-", "read,write,delete,readlink";
 
-  permission java.io.FilePermission "${solr.jetty.keystore}", "read,write,delete,readlink";
-  permission java.io.FilePermission "${solr.jetty.keystore}${/}-", "read,write,delete,readlink";
+  permission java.io.FilePermission "${solr.jetty.keystore}", "read,readlink";
 
-  permission java.io.FilePermission "${solr.jetty.truststore}", "read,write,delete,readlink";
-  permission java.io.FilePermission "${solr.jetty.truststore}${/}-", "read,write,delete,readlink";
+  permission java.io.FilePermission "${solr.jetty.truststore}", "read,readlink";
+
+  permission java.io.FilePermission "${javax.net.ssl.keyStore}", "read,readlink";
+
+  permission java.io.FilePermission "${javax.net.ssl.trustStore}", "read,readlink";
 
   permission java.io.FilePermission "${solr.install.dir}", "read,write,delete,readlink";
   permission java.io.FilePermission "${solr.install.dir}${/}-", "read,write,delete,readlink";
+  permission java.io.FilePermission "${solr.install.symDir}", "read,write,delete,readlink";
+  permission java.io.FilePermission "${solr.install.symDir}${/}-", "read,write,delete,readlink";
 
   permission java.io.FilePermission "${jetty.home}", "read,write,delete,readlink";
   permission java.io.FilePermission "${jetty.home}${/}-", "read,write,delete,readlink";
@@ -199,7 +213,15 @@ grant {
   permission java.io.FilePermission "${solr.log.dir}", "read,write,delete,readlink";
   permission java.io.FilePermission "${solr.log.dir}${/}-", "read,write,delete,readlink";
 
+  permission java.io.FilePermission "${solr.allowPaths}", "read,write,delete,readlink";
+  permission java.io.FilePermission "${solr.allowPaths}${/}-", "read,write,delete,readlink";
+
   permission java.io.FilePermission "${log4j.configurationFile}", "read,write,delete,readlink";
+
+  // Credentials for S3 Repository
+  permission java.io.FilePermission "${aws.sharedCredentialsFile}", "read,readlink";
+  permission java.io.FilePermission "${aws.configFile}", "read,readlink";
+  permission java.io.FilePermission "${user.home}${/}.aws${/}-", "read,readlink";
 
   // expanded to a wildcard if set, allows all networking everywhere
   permission java.net.SocketPermission "${solr.internal.network.permission}", "accept,listen,connect,resolve";

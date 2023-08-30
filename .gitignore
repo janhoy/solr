@@ -6,15 +6,26 @@ build/
 
 # IntelliJ IDEA
 /.idea/
+.run
+**/*.iml
+**/*.ipr
+**/*.iws
+out/
 #    IntelliJ creates this folder, ignore.
 /dev-tools/missing-doclet/out/
 
 # Eclipse
-/.project
-/.classpath
-/.settings/
+**/.project
+**/.classpath
+**/.settings/
+/.metadata
 #    Eclipse Gradle oddity
 **/bin/default/
+
+.editorconfig
+
+# syncthing
+.stignore
 
 # macOS
 .DS_Store
@@ -25,3 +36,10 @@ __pycache__
 
 # Emacs backup
 *~
+
+# Ignore lucene included build
+/lucene
+
+# Ignore gradle wrapper
+gradle/wrapper/gradle-wrapper.jar
+.gradletasknamecache

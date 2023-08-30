@@ -25,12 +25,22 @@ REM to use, but you can set a specific path for Solr to use without
 REM affecting other Java applications on your server/workstation.
 REM set SOLR_JAVA_HOME=
 
+REM This controls the number of seconds that the solr script will wait for
+REM Solr to stop gracefully. If the graceful stop fails, the script will
+REM forcibly stop Solr.
+REM set SOLR_STOP_WAIT=180
+
+REM This controls the number of seconds that the solr script will wait for
+REM Solr to start. If the start fails you should inspect the Solr log files
+REM for more information.
+REM set SOLR_START_WAIT=30
+
 REM Increase Java Min/Max Heap as needed to support your indexing / query needs
 REM set SOLR_JAVA_MEM=-Xms512m -Xmx512m
 
 REM Configure verbose GC logging:
 REM For Java 8: if this is set, additional params will be added to specify the log file & rotation
-REM For Java 9 or higher: GC_LOG_OPTS is currently not supported. If you set it, the startup script will exit with failure.
+REM For Java 9 or higher: GC_LOG_OPTS is currently not supported unless you are using OpenJ9. Otherwise if you set it, the startup script will exit with failure.
 REM set GC_LOG_OPTS=-verbose:gc -XX:+PrintHeapAtGC -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintGCTimeStamps -XX:+PrintTenuringDistribution -XX:+PrintGCApplicationStoppedTime
 
 REM Various GC settings have shown to work well for a number of common Solr workloads.
@@ -55,6 +65,9 @@ REM e.g. host1:2181,host2:2181/chroot
 REM Leave empty if not using SolrCloud
 REM set ZK_HOST=
 
+REM Set to true if your ZK host has a chroot path, and you want to create it automatically.
+REM set ZK_CREATE_CHROOT=true
+
 REM Set the ZooKeeper client timeout (for SolrCloud mode)
 REM set ZK_CLIENT_TIMEOUT=30000
 
@@ -64,6 +77,12 @@ REM set SOLR_HOST=192.168.1.1
 
 REM By default Solr will try to connect to Zookeeper with 30 seconds in timeout; override the timeout if needed
 REM set SOLR_WAIT_FOR_ZK=30
+
+REM By default Solr will log a warning for cores that are not registered in Zookeeper at startup
+REM but otherwise ignore them. This protects against misconfiguration (e.g. connecting to the
+REM wrong Zookeeper instance or chroot), however you need to manually delete the cores if
+REM they are no longer required. Set to "true" to have Solr automatically delete unknown cores.
+REM set SOLR_DELETE_UNKNOWN_CORES=false
 
 REM By default the start script uses UTC; override the timezone if needed
 REM set SOLR_TIMEZONE=UTC
@@ -98,13 +117,8 @@ REM set SOLR_LOG_LEVEL=INFO
 REM Location where Solr should write logs to. Absolute or relative to solr start dir
 REM set SOLR_LOGS_DIR=logs
 
-REM Enables log rotation before starting Solr. Setting SOLR_LOG_PRESTART_ROTATION=true will let Solr take care of pre
-REM start rotation of logs. This is false by default as log4j2 handles this for us. If you choose to use another log
-REM framework that cannot do startup rotation, you may want to enable this to let Solr rotate logs on startup.
-REM set SOLR_LOG_PRESTART_ROTATION=false
-
 REM Enables jetty request log for all requests
-REM set SOLR_REQUESTLOG_ENABLED=false
+REM set SOLR_REQUESTLOG_ENABLED=true
 
 REM Sets the port Solr binds to, default is 8983
 REM set SOLR_PORT=8983
@@ -116,16 +130,18 @@ REM set this value as narrowly as required before going to production. In
 REM environments where security is not a concern, 0.0.0.0 can be used to allow
 REM Solr to accept connections on all network interfaces.
 REM set SOLR_JETTY_HOST=127.0.0.1
+REM Sets the network interface the Embedded ZK binds to.
+REM set SOLR_ZK_EMBEDDED_HOST=127.0.0.1
 
 REM Restrict access to solr by IP address.
 REM Specify a comma-separated list of addresses or networks, for example:
 REM   127.0.0.1, 192.168.0.0/24, [::1], [2000:123:4:5::]/64
-REM set SOLR_IP_WHITELIST=
+REM set SOLR_IP_ALLOWLIST=
 
 REM Block access to solr from specific IP addresses.
 REM Specify a comma-separated list of addresses or networks, for example:
 REM   127.0.0.1, 192.168.0.0/24, [::1], [2000:123:4:5::]/64
-REM set SOLR_IP_BLACKLIST=
+REM set SOLR_IP_DENYLIST=
 
 REM Enables HTTPS. It is implictly true if you set SOLR_SSL_KEY_STORE. Use this config
 REM to enable https module with custom jetty configuration.
@@ -177,17 +193,32 @@ REM set SOLR_AUTH_TYPE=basic
 REM set SOLR_AUTHENTICATION_OPTS=-Dbasicauth=solr:SolrRocks
 
 REM Settings for ZK ACL
-REM set SOLR_ZK_CREDS_AND_ACLS=-DzkACLProvider=org.apache.solr.common.cloud.VMParamsAllAndReadonlyDigestZkACLProvider ^
-REM  -DzkCredentialsProvider=org.apache.solr.common.cloud.VMParamsSingleSetCredentialsDigestZkCredentialsProvider ^
+REM set SOLR_ZK_CREDS_AND_ACLS=-DzkACLProvider=org.apache.solr.common.cloud.DigestZkACLProvider ^
+REM  -DzkCredentialsProvider=org.apache.solr.common.cloud.DigestZkCredentialsProvider ^
+REM  -DzkCredentialsInjector=org.apache.solr.common.cloud.VMParamsZkCredentialsInjector ^
 REM  -DzkDigestUsername=admin-user -DzkDigestPassword=CHANGEME-ADMIN-PASSWORD ^
 REM  -DzkDigestReadonlyUsername=readonly-user -DzkDigestReadonlyPassword=CHANGEME-READONLY-PASSWORD
 REM set SOLR_OPTS=%SOLR_OPTS% %SOLR_ZK_CREDS_AND_ACLS%
 
+REM optionally, you can use using a a Java properties file 'zkDigestCredentialsFile'
+REM ...
+REM   -DzkDigestCredentialsFile=/path/to/zkDigestCredentialsFile.properties
+REM ...
+
+REM Use a custom injector to inject ZK credentials into DigestZkACLProvider
+REM -DzkCredentialsInjector expects a class implementing org.apache.solr.common.cloud.ZkCredentialsInjector
+REM  ...
+REM  -DzkCredentialsInjector=fully.qualified.class.CustomInjectorClassName
+REM ...
+
+REM Jetty GZIP module enabled by default
+REM set SOLR_GZIP_ENABLED=true
+
 REM When running Solr in non-cloud mode and if planning to do distributed search (using the "shards" parameter), the
-REM list of hosts needs to be whitelisted or Solr will forbid the request. The whitelist can be configured in solr.xml,
-REM or if you are using the OOTB solr.xml, can be specified using the system property "solr.shardsWhitelist". Alternatively
-REM host checking can be disabled by using the system property "solr.disable.shardsWhitelist"
-REM set SOLR_OPTS=%SOLR_OPTS% -Dsolr.shardsWhitelist=http://localhost:8983,http://localhost:8984
+REM list of hosts needs to be defined in an allow-list or Solr will forbid the request. The allow-list can be configured
+REM in solr.xml, or if you are using the OOTB solr.xml, can be specified using the system property "solr.allowUrls".
+REM Alternatively host checking can be disabled by using the system property "solr.disable.allowUrls"
+REM set SOLR_OPTS=%SOLR_OPTS% -Dsolr.allowUrls=http://localhost:8983,http://localhost:8984
 
 REM For a visual indication in the Admin UI of what type of environment this cluster is, configure
 REM a -Dsolr.environment property below. Valid values are prod, stage, test, dev, with an optional
@@ -212,4 +243,19 @@ REM set SOLR_ADMIN_UI_DISABLED=false
 REM Solr is by default allowed to read and write data from/to SOLR_HOME and a few other well defined locations
 REM Sometimes it may be necessary to place a core or a backup on a different location or a different disk
 REM This parameter lets you specify file system path(s) to explicitly allow. The special value of '*' will allow any path
-REM SOLR_OPTS="%SOLR_OPTS% -Dsolr.allowPaths=D:\,E:\other\path"
+REM set SOLR_OPTS=%SOLR_OPTS% -Dsolr.allowPaths=D:\,E:\other\path
+
+REM Before version 9.0, Solr required a copy of solr.xml file in $SOLR_HOME. Now Solr will use a default file if not found.
+REM To restore the old behavior, set the variable below to true
+REM set SOLR_SOLRXML_REQUIRED=false
+
+REM Some previous versions of Solr use an outdated log4j dependency. If you are unable to use at least log4j version 2.15.0
+REM then enable the following setting to address CVE-2021-44228
+REM set SOLR_OPTS=%SOLR_OPTS% -Dlog4j2.formatMsgNoLookups=true
+
+REM The bundled plugins in the "modules" folder can easily be enabled as a comma-separated list in SOLR_MODULES variable
+REM set SOLR_MODULES=extraction,ltr
+
+REM Configure the default replica placement plugin to use if one is not configured in cluster properties
+REM See https://solr.apache.org/guide/solr/latest/configuration-guide/replica-placement-plugins.html for details
+REM set SOLR_PLACEMENTPLUGIN_DEFAULT=simple

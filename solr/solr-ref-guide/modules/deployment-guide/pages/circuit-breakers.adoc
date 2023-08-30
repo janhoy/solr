@@ -1,0 +1,79 @@
+= Circuit Breakers
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+Solr's circuit breaker infrastructure allows prevention of actions that can cause a node to go beyond its capacity or to go down.
+The premise of circuit breakers is to ensure a higher quality of service and only accept request loads that are serviceable in the current
+resource configuration.
+
+== When To Use Circuit Breakers
+Circuit breakers should be used when the user wishes to trade request throughput for a higher Solr stability.
+If circuit breakers are enabled, requests may be rejected under the condition of high node duress with an appropriate HTTP error code (typically 503).
+
+It is up to the client to handle this error and potentially build a retrial logic as this should ideally be a transient situation.
+
+== Circuit Breaker Configurations
+All circuit breaker configurations are listed as independent `<circuitBreaker>` entries in `solrconfig.xml` as shown below.
+
+== Currently Supported Circuit Breakers
+
+=== JVM Heap Usage
+
+This circuit breaker tracks JVM heap memory usage and rejects incoming search requests with a 503 error code if the heap usage exceeds a configured percentage of maximum heap allocated to the JVM (-Xmx).
+The main configuration for this circuit breaker is controlling the threshold percentage at which the breaker will trip.
+
+To enable and configure the JVM heap usage based circuit breaker, add the following:
+
+[source,xml]
+----
+<circuitBreaker class="org.apache.solr.util.circuitbreaker.MemoryCircuitBreaker">
+ <double name="threshold">75</double>
+</circuitBreaker>
+----
+
+The `threshold` is defined as a percentage of the max heap allocated to the JVM.
+
+It does not logically make sense to have a threshold below 50% and above 95% of the max heap allocated to the JVM.
+Hence, the range of valid values for this parameter is [50, 95], both inclusive.
+
+Consider the following example:
+
+JVM has been allocated a maximum heap of 5GB (-Xmx) and `threshold` is set to `75`.
+In this scenario, the heap usage at which the circuit breaker will trip is 3.75GB.
+
+=== CPU Utilization
+
+This circuit breaker tracks CPU utilization and triggers if the average CPU utilization over the last one minute exceeds a configurable threshold.
+Note that the value used in computation is over the last one minute -- so a sudden spike in traffic that goes down might still cause the circuit breaker to trigger for a short while before it resolves and updates the value.
+For more details of the calculation, please see https://en.wikipedia.org/wiki/Load_(computing)
+
+To enable and configure the CPU utilization based circuit breaker:
+
+[source,xml]
+----
+<circuitBreaker class="org.apache.solr.util.circuitbreaker.CPUCircuitBreaker">
+ <double  name="threshold">75</double>
+</circuitBreaker>
+----
+
+The `threshold` is defined in units of CPU utilization.
+
+== Performance Considerations
+
+It is worth noting that while JVM or CPU circuit breakers do not add any noticeable overhead per query, having too many circuit breakers checked for a single request can cause a performance overhead.
+
+In addition, it is a good practice to exponentially back off while retrying requests on a busy node.
