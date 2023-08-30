@@ -84,8 +84,8 @@ To enable and configure the CPU utilization based circuit breaker:
 ----
 
 The triggering threshold is defined in percent CPU usage. A value of "0" maps to 0% usage
-and a value of "100" maps to 100% usage.  The example above will trip when the CPU usage is
-equal to or greater than 75%:.
+and a value of "100" maps to 100% usage. The example above will trip when the CPU usage is
+equal to or greater than 75%.
 
 === System Load Average Circuit Breaker
 This circuit breaker tracks system load average and triggers if the recent load average exceeds a configurable threshold.
