@@ -72,7 +72,7 @@ public class LoadAverageCircuitBreaker extends CircuitBreaker {
   @Override
   public String getDebugInfo() {
 
-    if (seenLoadAverage.get() == 0.0 || seenLoadAverage.get() == 0.0) {
+    if (seenLoadAverage.get() == 0.0 || allowedLoadAverage.get() == 0.0) {
       log.warn(
           "LoadAverageCircuitBreaker's monitored values (seenLoadAverage, allowedLoadAverage) not set");
     }
