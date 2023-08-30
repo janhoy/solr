@@ -106,7 +106,6 @@ public class CPUCircuitBreaker extends CircuitBreaker {
     return cpuUsageThreshold;
   }
 
-  @SuppressWarnings("rawtypes")
   protected double calculateLiveCPUUsage() {
     // TODO: Use Codahale Meter to calculate the value
     Metric metric =
