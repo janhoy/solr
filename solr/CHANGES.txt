@@ -70,6 +70,8 @@ Other Changes
 ==================  9.4.0 ==================
 New Features
 ---------------------
+* SOLR-16654: Add support for node-level caches (Michael Gibney)
+
 * SOLR-15056: A new Circuit breaker for percentage of CPU utilization is added. The former "CPU" circuit breaker is now more correctly named
   LoadAverageCircuitBreaker as it trips on system load average which is not a percentage. Users of legacy CircuitBreakerManager are not affected by this change.
   (Walter Underwood,  janhoy)
@@ -108,6 +110,12 @@ Improvements
 * SOLR-15474: Make Circuit breakers individually pluggable (Atri Sharma, Christine Poerschke, janhoy)
 
 * SOLR-16927: Allow SolrClientCache clients to use Jetty HTTP2 clients (Alex Deparvu, David Smiley)
+
+* SOLR-16896, SOLR-16897: Add support of OAuth 2.0/OIDC 'code with PKCE' flow (Lamine Idjeraoui, janhoy, Kevin Risden)
+
+* SOLR-16879: Limit the number of concurrent expensive core admin operations by running them in a
+  dedicated thread pool. Backup, Restore and Split are expensive operations.
+  (Pierre Salagnac, David Smiley)
 
 Optimizations
 ---------------------
@@ -148,6 +156,8 @@ Bug Fixes
 
 * SOLR-16916: Use of the JSON Query DSL should ignore the defType parameter
   (Christina Chortaria, Max Kadel, Ryan Laddusaw, Jane Sandberg, David Smiley)
+
+* SOLR-16958: Fix spurious warning about LATEST luceneMatchVersion (Colvin Cowie)
 
 Dependency Upgrades
 ---------------------
