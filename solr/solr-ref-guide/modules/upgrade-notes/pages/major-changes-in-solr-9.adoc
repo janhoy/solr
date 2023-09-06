@@ -81,7 +81,7 @@ Therefore, when using the default settings, nodes that were previously excluded 
 see the  xref:deployment-guide:securing-solr.adoc#network-configuration[Network Configuration documentation] for more information.
 
 === Circuit Breaker
-* The Circuit Breakers are now pluggable, and you can define multiple circuit breakers including custom ones. The existing `CircuitBreakerManager` is deprecated, and users are encouraged to switch to the new plugins.
+* The Circuit Breakers are now pluggable, and you can define multiple circuit breakers including custom ones. The existing `CircuitBreakerManager` is deprecated, and users are encouraged to switch to the new plugins. While the old `CircuitBreakerManager` returned HTTP 503 when a circuit breaker was tripped, the new plugins return HTTP 429.
 
 == Solr 9.3
 === Binary Releases
