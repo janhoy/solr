@@ -50,6 +50,8 @@ public class SolrProcessManager {
   public static boolean enableTestingMode = false;
 
   public SolrProcessManager() {
+    List<ProcessHandle> allProcs = ProcessHandle.allProcesses().collect(Collectors.toList());
+    log.info("Found {} processes in total with pids {}", allProcs.size(), allProcs.stream().map(ProcessHandle::pid).collect(Collectors.toList()));
     pidProcessMap =
         ProcessHandle.allProcesses()
             .filter(p -> p.info().command().orElse("").contains("java"))
@@ -66,6 +68,7 @@ public class SolrProcessManager {
                             ph.pid(), parsePortFromProcess(ph).orElseThrow(), isProcessSsl(ph))));
     portProcessMap =
         pidProcessMap.values().stream().collect(Collectors.toUnmodifiableMap(p -> p.port, p -> p));
+    log.info("Found {} Solr processes on pids {} and ports {}", pidProcessMap.size(), pidProcessMap.keySet(), portProcessMap.keySet());
     pidDir =
         Paths.get(
             EnvUtils.getProperty(
