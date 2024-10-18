@@ -57,24 +57,9 @@ import java.util.function.Supplier;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import net.jcip.annotations.ThreadSafe;
-import org.apache.http.Header;
-import org.apache.http.HeaderIterator;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpEntityEnclosingRequest;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpHead;
-import org.apache.http.client.methods.HttpOptions;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.entity.InputStreamEntity;
 import org.apache.solr.api.ApiBag;
 import org.apache.solr.api.V2HttpCall;
 import org.apache.solr.client.solrj.impl.CloudSolrClient;
-import org.apache.solr.client.solrj.impl.HttpClientUtil;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.cloud.Aliases;
@@ -128,6 +113,12 @@ import org.apache.solr.util.RTimerTree;
 import org.apache.solr.util.TimeOut;
 import org.apache.solr.util.tracing.TraceUtils;
 import org.apache.zookeeper.KeeperException;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.client.api.Response;
+import org.eclipse.jetty.client.util.InputStreamContentProvider;
+import org.eclipse.jetty.client.util.InputStreamResponseListener;
+import org.eclipse.jetty.http.HttpMethod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MarkerFactory;
@@ -727,94 +718,62 @@ public class HttpSolrCall {
     }
   }
 
-  // TODO using Http2Client
   private void remoteQuery(String coreUrl, HttpServletResponse resp) throws IOException {
-    HttpRequestBase method;
-    HttpEntity httpEntity = null;
-
+    HttpClient httpClient = new HttpClient();
     ModifiableSolrParams updatedQueryParams = new ModifiableSolrParams(queryParams);
     int forwardCount = queryParams.getInt(INTERNAL_REQUEST_COUNT, 0) + 1;
     updatedQueryParams.set(INTERNAL_REQUEST_COUNT, forwardCount);
     String queryStr = updatedQueryParams.toQueryString();
+    String urlstr = coreUrl + queryStr;
 
     try {
-      String urlstr = coreUrl + queryStr;
+      httpClient.start();
 
-      boolean isPostOrPutRequest = "POST".equals(req.getMethod()) || "PUT".equals(req.getMethod());
-      if ("GET".equals(req.getMethod())) {
-        method = new HttpGet(urlstr);
-      } else if ("HEAD".equals(req.getMethod())) {
-        method = new HttpHead(urlstr);
-      } else if (isPostOrPutRequest) {
-        HttpEntityEnclosingRequestBase entityRequest =
-            "POST".equals(req.getMethod()) ? new HttpPost(urlstr) : new HttpPut(urlstr);
-        InputStream in = req.getInputStream();
-        HttpEntity entity = new InputStreamEntity(in, req.getContentLength());
-        entityRequest.setEntity(entity);
-        method = entityRequest;
-      } else if ("DELETE".equals(req.getMethod())) {
-        method = new HttpDelete(urlstr);
-      } else if ("OPTIONS".equals(req.getMethod())) {
-        method = new HttpOptions(urlstr);
-      } else {
-        throw new SolrException(
-            SolrException.ErrorCode.SERVER_ERROR, "Unexpected method type: " + req.getMethod());
+      // Prepare the request based on the HTTP method
+      Request request =
+          httpClient.newRequest(urlstr).method(HttpMethod.fromString(req.getMethod()));
+      if ("POST".equals(req.getMethod()) || "PUT".equals(req.getMethod())) {
+        request.content(new InputStreamContentProvider(req.getInputStream()), req.getContentType());
       }
 
+      // Add headers from the original request
       for (Enumeration<String> e = req.getHeaderNames(); e.hasMoreElements(); ) {
         String headerName = e.nextElement();
         if (!"host".equalsIgnoreCase(headerName)
             && !"authorization".equalsIgnoreCase(headerName)
             && !"accept".equalsIgnoreCase(headerName)) {
-          method.addHeader(headerName, req.getHeader(headerName));
+          request.header(headerName, req.getHeader(headerName));
         }
       }
-      // These headers not supported for HttpEntityEnclosingRequests
-      if (method instanceof HttpEntityEnclosingRequest) {
-        method.removeHeaders(TRANSFER_ENCODING_HEADER);
-        method.removeHeaders(CONTENT_LENGTH_HEADER);
-      }
 
-      final HttpResponse response =
-          solrDispatchFilter
-              .getHttpClient()
-              .execute(method, HttpClientUtil.createNewHttpClientRequestContext());
-      int httpStatus = response.getStatusLine().getStatusCode();
-      httpEntity = response.getEntity();
+      // Use InputStreamResponseListener to get the response content
+      InputStreamResponseListener listener = new InputStreamResponseListener();
+      request.send(listener);
 
+      // Wait for the response headers to arrive
+      Response response = listener.get(60, java.util.concurrent.TimeUnit.SECONDS);
+
+      int httpStatus = response.getStatus();
       resp.setStatus(httpStatus);
-      for (HeaderIterator responseHeaders = response.headerIterator();
-          responseHeaders.hasNext(); ) {
-        Header header = responseHeaders.nextHeader();
 
-        // We pull out these two headers below because they can cause chunked
-        // encoding issues with Tomcat
-        if (header != null
-            && !header.getName().equalsIgnoreCase(TRANSFER_ENCODING_HEADER)
-            && !header.getName().equalsIgnoreCase(CONNECTION_HEADER)) {
+      // Set response headers, skipping transfer encoding and connection headers
+      response
+          .getHeaders()
+          .forEach(
+              header -> {
+                if (!TRANSFER_ENCODING_HEADER.equalsIgnoreCase(header.getName())
+                    && !CONNECTION_HEADER.equalsIgnoreCase(header.getName())) {
+                  resp.setHeader(header.getName(), header.getValue());
+                }
+              });
 
-          // NOTE: explicitly using 'setHeader' instead of 'addHeader' so that
-          // the remote nodes values for any response headers will overide any that
-          // may have already been set locally (ex: by the local jetty's RewriteHandler config)
-          resp.setHeader(header.getName(), header.getValue());
-        }
-      }
-
-      if (httpEntity != null) {
-        if (httpEntity.getContentEncoding() != null)
-          resp.setHeader(
-              httpEntity.getContentEncoding().getName(),
-              httpEntity.getContentEncoding().getValue());
-        if (httpEntity.getContentType() != null)
-          resp.setContentType(httpEntity.getContentType().getValue());
-
-        InputStream is = httpEntity.getContent();
+      // Wait for the response body to be available
+      try (InputStream responseContent = listener.getInputStream()) {
         OutputStream os = resp.getOutputStream();
-
-        is.transferTo(os);
+        responseContent.transferTo(os);
       }
 
-    } catch (IOException e) {
+    } catch (Exception e) {
       sendError(
           new SolrException(
               SolrException.ErrorCode.SERVER_ERROR,
@@ -824,7 +783,11 @@ public class HttpSolrCall {
                   + forwardCount,
               e));
     } finally {
-      Utils.consumeFully(httpEntity);
+      try {
+        httpClient.stop();
+      } catch (Exception e) {
+        /* Ignored */
+      }
     }
   }
 
