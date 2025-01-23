@@ -4,9 +4,17 @@
   "enabled": true,
   "dependencyDashboard": false,
   "enabledManagers": ["gradle", "github-actions"],
-  "includePaths": ["gradle/libs.versions.toml", "versions.*", "build.gradle", ".github/workflows/*"],
+  "includePaths": [
+    "gradle/libs.versions.toml",
+    "versions.*",
+    "build.gradle",
+    ".github/workflows/*"
+  ],
   "postUpgradeTasks": {
-    "commands": ["./gradlew resolveAndLockAll --write-locks", "./gradlew updateLicenses"],
+    "commands": [
+      "./gradlew resolveAndLockAll --write-locks",
+      "./gradlew updateLicenses"
+    ],
     "fileFilters": ["solr/licenses/*.sha1"],
     "executionMode": "branch"
   },
@@ -23,13 +31,13 @@
     },
     {
       "description": "Group these calcite dependency upgrades together in same PR",
-      "matchPackagePrefixes": ["org.apache.calcite"],
-      "groupName": "org.apache.calcite"
+      "groupName": "org.apache.calcite",
+      "matchPackageNames": ["org.apache.calcite{/,}**"]
     },
     {
       "description": "Group these httpcomponents dependency upgrades together in same PR",
-      "matchPackagePrefixes": ["org.apache.httpcomponents"],
-      "groupName": "org.apache.httpcomponents"
+      "groupName": "org.apache.httpcomponents",
+      "matchPackageNames": ["org.apache.httpcomponents{/,}**"]
     },
     {
       "description": "Test-dependencies are checked less often than the shipped deps",
@@ -38,8 +46,11 @@
     },
     {
       "description": "Noisy, frequently updated dependencies checked less often",
-      "matchPackagePrefixes": ["software.amazon.awssdk", "com.google.cloud"],
-      "schedule": ["before 9am on the first day of the month"]
+      "schedule": ["before 9am on the first day of the month"],
+      "matchPackageNames": [
+        "software.amazon.awssdk{/,}**",
+        "com.google.cloud{/,}**"
+      ]
     },
     {
       "description": "Workaround for https://github.com/renovatebot/renovate/issues/19226",
@@ -48,14 +59,14 @@
     },
     {
       "description": "Lucene dependencies should be skipped",
-      "matchPackagePrefixes": ["org.apache.lucene"],
-      "enabled": false
+      "enabled": false,
+      "matchPackageNames": ["org.apache.lucene{/,}**"]
     },
     {
       "description": "Skip major jetty upgrades - must be done manually",
-      "matchPackagePrefixes": ["org.eclipse.jetty"],
       "matchUpdateTypes": ["major"],
-      "enabled": false
+      "enabled": false,
+      "matchPackageNames": ["org.eclipse.jetty{/,}**"]
     },
     {
       "description": "Changelog for commons-io",
