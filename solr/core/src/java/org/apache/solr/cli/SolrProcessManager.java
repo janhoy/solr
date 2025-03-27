@@ -18,11 +18,8 @@ package org.apache.solr.cli;
 
 import static org.apache.solr.servlet.SolrDispatchFilter.SOLR_INSTALL_DIR_ATTRIBUTE;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.lang.invoke.MethodHandles;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,10 +34,11 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.lucene.util.Constants;
-import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.EnvUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import oshi.SystemInfo;
+import oshi.software.os.OSProcess;
 
 /** Class to interact with Solr OS processes */
 public class SolrProcessManager {
@@ -152,7 +150,8 @@ public class SolrProcessManager {
   }
 
   /**
-   * Gets the command line of a process as a string. This is a workaround for the fact that
+   * Gets the command line of a process as a string. On Windows, we use the OSHI library for more
+   * reliable fetching of command line as a workaround for the fact that
    * ProcessHandle.info().command() is not (yet) implemented on Windows.
    *
    * @param ph the process handle
@@ -162,38 +161,11 @@ public class SolrProcessManager {
     if (!Constants.WINDOWS) {
       return ph.info().commandLine();
     } else {
-      long desiredProcessid = ph.pid();
-      try {
-        Process process =
-            new ProcessBuilder(
-                    "wmic",
-                    "process",
-                    "where",
-                    "ProcessID=" + desiredProcessid,
-                    "get",
-                    "commandline",
-                    "/format:list")
-                .redirectErrorStream(true)
-                .start();
-        try (InputStreamReader inputStreamReader =
-                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8);
-            BufferedReader reader = new BufferedReader(inputStreamReader)) {
-          while (true) {
-            String line = reader.readLine();
-            if (line == null) {
-              return Optional.empty();
-            }
-            if (!line.startsWith("CommandLine=")) {
-              continue;
-            }
-            return Optional.of(line.substring("CommandLine=".length()));
-          }
-        }
-      } catch (IOException e) {
-        throw new SolrException(
-            SolrException.ErrorCode.SERVER_ERROR,
-            "Error getting command line for process " + desiredProcessid,
-            e);
+      OSProcess process = new SystemInfo().getOperatingSystem().getProcess((int) ph.pid());
+      if (process != null) {
+        return Optional.ofNullable(process.getCommandLine());
+      } else {
+        return Optional.empty();
       }
     }
   }
