@@ -182,6 +182,10 @@ Each YAML file complies with the schema outlined in `dev-docs/changelog.adoc`.
     # Default behavior
     python3 dev-tools/scripts/changes2logchange.py solr/CHANGES.txt
 
+### validateChangelogs.py
+
+Validates changelog folder structure and feature distribution across development branches (main, stable, release). See dev-docs for more.
+
 ### gitignore-gen.sh
 
 TBD
