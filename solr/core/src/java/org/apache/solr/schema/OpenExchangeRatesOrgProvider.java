@@ -35,14 +35,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Exchange Rates Provider for {@link CurrencyFieldType} capable of fetching &amp; parsing the
- * freely available exchange rates from openexchangerates.org
+ * Exchange Rates Provider for {@link CurrencyFieldType} capable of fetching &amp; parsing exchange
+ * rates from a URL endpoint returning JSON data in the openexchangerates.org format.
  *
  * <p>Configuration Options:
  *
  * <ul>
- *   <li><code>ratesFileLocation</code> - A file path or absolute URL specifying the JSON data to
- *       load (mandatory)
+ *   <li><code>ratesFileLocation</code> - Absolute URL specifying the JSON data endpoint with path
+ *       ending in <code>/latest.json</code>. Alternatively, provide the path to a json file.
  *   <li><code>refreshInterval</code> - How frequently (in minutes) to reload the exchange rate data
  *       (default: 1440)
  * </ul>
@@ -150,13 +150,27 @@ public class OpenExchangeRatesOrgProvider implements ExchangeRateProvider {
     try {
       log.debug("Reloading exchange rates from {}", ratesFileLocation);
       try {
-        ratesJsonStream = (new URI(ratesFileLocation).toURL()).openStream();
+        URI uri = new URI(ratesFileLocation);
+        // If it looks like a URL (has a scheme), validate it for security
+        if (uri.getScheme() != null) {
+          validateUrlSecurity(uri);
+          ratesJsonStream = uri.toURL().openStream();
+        } else {
+          // No scheme means it's a local file path - use ResourceLoader which enforces restrictions
+          ratesJsonStream = resourceLoader.openResource(ratesFileLocation);
+        }
+      } catch (SolrException e) {
+        // Re-throw validation exceptions
+        throw e;
       } catch (Exception e) {
+        // Try as local resource if URI parsing fails
         ratesJsonStream = resourceLoader.openResource(ratesFileLocation);
       }
 
       rates = new OpenExchangeRates(ratesJsonStream);
       return true;
+    } catch (SolrException e) {
+      throw e;
     } catch (Exception e) {
       throw new SolrException(ErrorCode.SERVER_ERROR, "Error reloading exchange rates", e);
     } finally {
@@ -164,9 +178,35 @@ public class OpenExchangeRatesOrgProvider implements ExchangeRateProvider {
         try {
           ratesJsonStream.close();
         } catch (IOException e) {
-          throw new SolrException(ErrorCode.SERVER_ERROR, "Error closing stream", e);
+          log.error("Error closing stream", e);
         }
       }
+    }
+  }
+
+  /**
+   * Validates that a URL is safe to fetch from. Only HTTPS URLs with paths ending in /latest.json
+   * are allowed for remote data fetching.
+   *
+   * @param uri the URI to validate
+   * @throws SolrException if the URL fails security validation
+   */
+  protected void validateUrlSecurity(URI uri) throws SolrException {
+    String scheme = uri.getScheme();
+
+    // Reject any non-HTTPS schemes
+    if (scheme == null || !scheme.equalsIgnoreCase("https")) {
+      throw new SolrException(
+          ErrorCode.BAD_REQUEST,
+          "Only HTTPS allowed");
+    }
+
+    // Require path to end with /latest.json
+    String path = uri.getPath();
+    if (path == null || !path.endsWith("/latest.json")) {
+      throw new SolrException(
+          ErrorCode.BAD_REQUEST,
+          "URI path must end with '/latest.json'");
     }
   }
 
@@ -180,12 +220,12 @@ public class OpenExchangeRatesOrgProvider implements ExchangeRateProvider {
       }
       int refreshInterval =
           Integer.parseInt(getParam(params.get(PARAM_REFRESH_INTERVAL), DEFAULT_REFRESH_INTERVAL));
-      // Force a refresh interval of minimum one hour, since the API does not offer better
+      // Force a refresh interval of minimum one hour, since most APIs do not offer better
       // resolution
       if (refreshInterval < 60) {
         refreshInterval = 60;
         log.warn(
-            "Specified refreshInterval was too small. Setting to 60 minutes which is the update rate of openexchangerates.org");
+            "Specified refreshInterval was too small. Setting to 60 minutes which is the minimum recommended update interval");
       }
       log.debug(
           "Initialized with rates={}, refreshInterval={}.", ratesFileLocation, refreshInterval);

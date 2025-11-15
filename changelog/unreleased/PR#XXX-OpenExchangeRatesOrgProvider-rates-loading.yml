@@ -1,0 +1,8 @@
+title: Restrict OpenExchangeRatesOrgProvider rates file loading to https
+type: security
+authors:
+- name: Jan Høydahl
+links:
+- name: PR#XXX
+  url: https://github.com/apache/solr/pull/XXX
+

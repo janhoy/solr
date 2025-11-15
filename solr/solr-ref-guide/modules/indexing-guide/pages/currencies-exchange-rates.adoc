@@ -123,10 +123,11 @@ Here is a small snippet from this file:
 
 === OpenExchangeRatesOrgProvider
 
-You can configure Solr to download exchange rates from http://www.OpenExchangeRates.Org[OpenExchangeRates.Org], with updates rates between USD and 170 currencies hourly.
-These rates are symmetrical only.
+You can configure Solr to download exchange rates from a URL endpoint that returns JSON data in the openexchangerates.org format.
+You can use https://www.OpenExchangeRates.Org[OpenExchangeRates.Org] or any other compatible service.
+These rates are typically symmetrical only.
 
-In this case, you need to specify the `providerClass` in the definitions for the field type and sign up for an API key.
+In this case, you need to specify the `providerClass` in the definitions for the field type.
 Here is an example:
 
 [source,xml]
@@ -135,8 +136,11 @@ Here is an example:
            amountLongSuffix="_l_ns" codeStrSuffix="_s_ns"
            providerClass="solr.OpenExchangeRatesOrgProvider"
            refreshInterval="60"
-           ratesFileLocation="http://www.openexchangerates.org/api/latest.json?app_id=yourPersonalAppIdKey"/>
+           ratesFileLocation="https://openexchangerates.org/api/latest.json?app_id=yourPersonalAppIdKey"/>
 ----
 
 The `refreshInterval` is minutes, so the above example will download the newest rates every 60 minutes.
 The refresh interval may be increased, but not decreased.
+
+The `ratesFileLocation` must be an HTTPS URL with a path ending in `/latest.json`, or alternatively you can provide the path to a local JSON file.
+The provider accepts URLs from any host, as long as they use HTTPS and the endpoint path ends with `/latest.json`.

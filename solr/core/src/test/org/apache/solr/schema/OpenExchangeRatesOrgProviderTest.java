@@ -109,4 +109,124 @@ public class OpenExchangeRatesOrgProviderTest extends SolrTestCaseJ4 {
     oerp.getExchangeRate("ABC", "DEF");
     fail("Should have thrown exception if not initialized");
   }
+
+  @Test
+  public void testUrlSecurityValidation_HttpsAllowed() {
+    // HTTPS URLs with correct domain should pass validation
+    oerp.init(mockParams);
+    Map<String, String> params = new HashMap<>();
+    params.put(
+        OpenExchangeRatesOrgProvider.PARAM_RATES_FILE_LOCATION,
+        "https://openexchangerates.org/api/latest.json");
+    params.put(OpenExchangeRatesOrgProvider.PARAM_REFRESH_INTERVAL, "1440");
+    oerp.init(params);
+    assertEquals(
+        "https://openexchangerates.org/api/latest.json", oerp.ratesFileLocation);
+    // Note: We don't call inform() to avoid actually fetching the URL
+  }
+
+  @Test
+  public void testUrlSecurityValidation_HttpBlocked() {
+    // HTTP URLs should be rejected for security
+    try {
+      Map<String, String> params = new HashMap<>();
+      params.put(
+          OpenExchangeRatesOrgProvider.PARAM_RATES_FILE_LOCATION,
+          "http://openexchangerates.org/api/latest.json");
+      params.put(OpenExchangeRatesOrgProvider.PARAM_REFRESH_INTERVAL, "1440");
+      oerp.init(params);
+      oerp.inform(loader);
+      fail("Should have thrown exception for HTTP URL");
+    } catch (SolrException e) {
+      assertTrue("Should mention HTTPS requirement", e.getMessage().contains("HTTPS"));
+    }
+  }
+
+  @Test
+  public void testUrlSecurityValidation_FileSchemeBlocked() {
+    // file:// URLs should be rejected
+    try {
+      Map<String, String> params = new HashMap<>();
+      params.put(
+          OpenExchangeRatesOrgProvider.PARAM_RATES_FILE_LOCATION, "file:///etc/passwd");
+      params.put(OpenExchangeRatesOrgProvider.PARAM_REFRESH_INTERVAL, "1440");
+      oerp.init(params);
+      oerp.inform(loader);
+      fail("Should have thrown exception for file:// URL");
+    } catch (SolrException e) {
+      assertTrue("Should mention HTTPS requirement", e.getMessage().contains("HTTPS"));
+    }
+  }
+
+  @Test
+  public void testUrlSecurityValidation_WrongPathBlocked() {
+    // HTTPS URLs with wrong path should be rejected
+    try {
+      Map<String, String> params = new HashMap<>();
+      params.put(
+          OpenExchangeRatesOrgProvider.PARAM_RATES_FILE_LOCATION,
+          "https://example.com/api/rates.json");
+      params.put(OpenExchangeRatesOrgProvider.PARAM_REFRESH_INTERVAL, "1440");
+      oerp.init(params);
+      oerp.inform(loader);
+      fail("Should have thrown exception for path not ending in /latest.json");
+    } catch (SolrException e) {
+      assertTrue(
+          "Should mention /latest.json requirement",
+          e.getMessage().contains("/latest.json"));
+    }
+  }
+
+  @Test
+  public void testUrlSecurityValidation_LocalFilePathAllowed() {
+    // Local file paths (without scheme) should be allowed
+    oerp.init(mockParams);
+    oerp.inform(loader);
+    assertEquals(5, oerp.listAvailableCurrencies().size());
+  }
+
+  @Test
+  public void testUrlSecurityValidation_JarSchemeBlocked() {
+    // jar:// URLs should be rejected
+    try {
+      Map<String, String> params = new HashMap<>();
+      params.put(
+          OpenExchangeRatesOrgProvider.PARAM_RATES_FILE_LOCATION,
+          "jar:file:///path/to/file.jar!/resource");
+      params.put(OpenExchangeRatesOrgProvider.PARAM_REFRESH_INTERVAL, "1440");
+      oerp.init(params);
+      oerp.inform(loader);
+      fail("Should have thrown exception for jar:// URL");
+    } catch (SolrException e) {
+      assertTrue("Should mention HTTPS requirement", e.getMessage().contains("HTTPS"));
+    }
+  }
+
+  @Test
+  public void testUrlSecurityValidation_NoSchemeAllowed() {
+    // URLs without scheme (local paths) should be allowed and use ResourceLoader
+    Map<String, String> params = new HashMap<>();
+    params.put(
+        OpenExchangeRatesOrgProvider.PARAM_RATES_FILE_LOCATION, "open-exchange-rates.json");
+    oerp.init(params);
+    assertEquals("open-exchange-rates.json", oerp.ratesFileLocation);
+    // Inform should succeed with local file
+    oerp.inform(loader);
+    assertEquals(5, oerp.listAvailableCurrencies().size());
+  }
+
+  @Test
+  public void testUrlSecurityValidation_AnyDomainAllowed() {
+    // HTTPS URLs with correct path ending should be allowed from any domain
+    oerp.init(mockParams);
+    Map<String, String> params = new HashMap<>();
+    params.put(
+        OpenExchangeRatesOrgProvider.PARAM_RATES_FILE_LOCATION,
+        "https://custom-service.example.com/api/latest.json");
+    params.put(OpenExchangeRatesOrgProvider.PARAM_REFRESH_INTERVAL, "1440");
+    oerp.init(params);
+    assertEquals(
+        "https://custom-service.example.com/api/latest.json", oerp.ratesFileLocation);
+    // Note: We don't call inform() to avoid actually fetching the URL
+  }
 }
