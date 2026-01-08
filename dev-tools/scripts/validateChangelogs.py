@@ -336,8 +336,7 @@ class ChangelogValidator:
                    (stable, False, True, False, False, False),
                    (release, False, False, True, False, False)]
         if prev_major_bugfix:
-          self._log_and_print("Not using previous major")
-            #configs.append((prev_major_bugfix, False, False, False, True, False))
+            configs.append((prev_major_bugfix, False, False, False, True, False))
         if prev_major_stable:
             configs.append((prev_major_stable, False, False, False, False, True))
 
