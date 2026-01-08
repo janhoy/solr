@@ -166,7 +166,7 @@ class ChangelogValidator:
             return None
 
         for parts in (line.split() for line in result.stdout.strip().split("\n") if line):
-            if len(parts) >= 2 and "apache" in parts[1].lower() and "solr" in parts[1].lower():
+            if len(parts) >= 2 and "apache/solr" in parts[1].lower():
                 return parts[0]
         return None
 
