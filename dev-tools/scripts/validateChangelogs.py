@@ -47,6 +47,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, List, Set, Optional, Tuple
 from collections import defaultdict
+from scriptutil import Version
 
 @dataclass
 class BranchInfo:
@@ -529,7 +530,14 @@ class ChangelogValidator:
         return "\n".join(report_lines)
 
     def validate_versioned_folders_identical(self) -> bool:
-        """Verify that all changelog/vX.Y.Z folders are identical across branches."""
+        """Verify that all changelog/vX.Y.Z folders are identical across branches.
+
+        A folder vX.Y.Z should only exist on branches whose version is >= X.Y.Z.
+        For example, v10.0.0 should exist on branch_10_0 (10.0.1), branch_10x (10.1.0),
+        and main (11.0.0), but NOT on branch_9_10 (9.10.1) or branch_9x (9.11.0).
+        Similarly, v10.1.0 should exist on branch_10x (10.2.0) and main, but NOT on
+        branch_10_0 (10.0.2) since 10.0.2 < 10.1.0.
+        """
         self.info_messages.append("Validating versioned folders are identical across branches...")
 
         all_folders = set().union(*(info.versioned_folders.keys() for info in self.branches.values()))
@@ -540,15 +548,48 @@ class ChangelogValidator:
         errors_before = len(self.errors)
 
         for folder in sorted(all_folders):
+            # Parse the version from the folder name (e.g., "v10.0.0")
+            folder_version_str = folder.lstrip('v')
+            try:
+                folder_version = Version.parse(folder_version_str)
+            except (ValueError, argparse.ArgumentTypeError):
+                self.warnings.append(f"Could not parse version from folder name: {folder}")
+                continue
+
+            # Determine which branches should have this folder
+            # A folder vX.Y.Z should exist on branches where branch_version >= X.Y.Z
+            branches_that_should_have_folder = {}
+            for branch_name, branch_info in self.branches.items():
+                try:
+                    branch_version = Version.parse(branch_info.version)
+                    # Folder should exist if branch version >= folder version
+                    if branch_version.on_or_after(folder_version):
+                        branches_that_should_have_folder[branch_name] = branch_info
+                except (ValueError, argparse.ArgumentTypeError):
+                    self.warnings.append(f"Could not parse version for branch {branch_name}: {branch_info.version}")
+                    continue
+
+            # Get branches that actually have this folder
             contents_by_branch = {b: info.versioned_folders.get(folder)
                                  for b, info in self.branches.items() if folder in info.versioned_folders}
 
-            # Check if folder exists on all branches
-            if len(contents_by_branch) != len(self.branches):
-                missing_branches = set(self.branches.keys()) - set(contents_by_branch.keys())
+            # Check if folder exists on all branches that should have it
+            expected_branches = set(branches_that_should_have_folder.keys())
+            actual_branches = set(contents_by_branch.keys())
+
+            if actual_branches != expected_branches:
+                missing_branches = expected_branches - actual_branches
+                unexpected_branches = actual_branches - expected_branches
+
+                error_parts = []
+                if missing_branches:
+                    error_parts.append(f"missing on: {sorted(missing_branches)}")
+                if unexpected_branches:
+                    error_parts.append(f"unexpected on: {sorted(unexpected_branches)}")
+
                 error_obj = {
                     "folder": folder,
-                    "missing_on_branches": sorted(missing_branches)
+                    "issue": ", ".join(error_parts)
                 }
                 self.errors.append(error_obj)
                 continue
