@@ -47,7 +47,7 @@ public class StreamingSolrClients {
 
   private HttpJettySolrClient httpClient;
 
-  private Map<String, ConcurrentUpdateBaseSolrClient> solrClients = new HashMap<>();
+  private Map<String, ConcurrentUpdateBaseSolrClient<?>> solrClients = new HashMap<>();
   private List<SolrError> errors = Collections.synchronizedList(new ArrayList<>());
 
   private ExecutorService updateExecutor;
@@ -67,7 +67,7 @@ public class StreamingSolrClients {
 
   public synchronized SolrClient getSolrClient(final SolrCmdDistributor.Req req) {
     String url = getFullUrl(req.node.getUrl());
-    ConcurrentUpdateBaseSolrClient client = solrClients.get(url);
+    ConcurrentUpdateBaseSolrClient<?> client = solrClients.get(url);
     if (client == null) {
       // NOTE: increasing to more than 1 threadCount for the client could cause updates to be
       // reordered on a greater scale since the current behavior is to only increase the number of
@@ -93,13 +93,13 @@ public class StreamingSolrClients {
   }
 
   public synchronized void blockUntilFinished() throws IOException {
-    for (ConcurrentUpdateBaseSolrClient client : solrClients.values()) {
+    for (ConcurrentUpdateBaseSolrClient<?> client : solrClients.values()) {
       client.blockUntilFinished();
     }
   }
 
   public synchronized void shutdown() {
-    for (ConcurrentUpdateBaseSolrClient client : solrClients.values()) {
+    for (ConcurrentUpdateBaseSolrClient<?> client : solrClients.values()) {
       client.close();
     }
   }
@@ -151,9 +151,8 @@ class ErrorReportingConcurrentUpdateSolrClient extends ConcurrentUpdateJettySolr
   }
 
   @Override
-  public void onSuccess(Object responseMetadata, InputStream respBody) {
-    Response jettyResponse = (Response) responseMetadata;
-    req.trackRequestResult(jettyResponse, respBody, true);
+  public void onSuccess(Response responseMetadata, InputStream respBody) {
+    req.trackRequestResult(responseMetadata, respBody, true);
   }
 
   static class Builder extends ConcurrentUpdateJettySolrClient.Builder {

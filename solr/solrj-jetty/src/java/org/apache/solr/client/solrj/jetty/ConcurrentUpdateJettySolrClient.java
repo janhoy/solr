@@ -40,12 +40,13 @@ import org.eclipse.jetty.client.Response;
 import org.eclipse.jetty.http.HttpMethod;
 
 /** A ConcurrentUpdate SolrClient using {@link HttpJettySolrClient}. */
-public class ConcurrentUpdateJettySolrClient extends ConcurrentUpdateBaseSolrClient {
+public class ConcurrentUpdateJettySolrClient
+    extends ConcurrentUpdateBaseSolrClient<org.eclipse.jetty.client.Response> {
   protected static final Charset FALLBACK_CHARSET = StandardCharsets.UTF_8;
 
   private final HttpJettySolrClient client;
 
-  public static class Builder extends ConcurrentUpdateBaseSolrClient.Builder {
+  public static class Builder extends ConcurrentUpdateBaseSolrClient.Builder<Builder> {
     /**
      * @see org.apache.solr.client.solrj.impl.ConcurrentUpdateBaseSolrClient.Builder#Builder(String,
      *     HttpSolrClientBase)
@@ -75,8 +76,8 @@ public class ConcurrentUpdateJettySolrClient extends ConcurrentUpdateBaseSolrCli
   }
 
   @Override
-  protected StreamingResponse doSendUpdateStream(ConcurrentUpdateBaseSolrClient.Update update)
-      throws IOException, InterruptedException {
+  protected StreamingResponse<org.eclipse.jetty.client.Response> doSendUpdateStream(
+      ConcurrentUpdateBaseSolrClient.Update update) throws IOException, InterruptedException {
     InputStreamResponseListener jettyListener;
     try (OutStream out = initOutStream(basePath, update.request(), update.collection())) {
       ConcurrentUpdateBaseSolrClient.Update upd = update;
@@ -149,7 +150,8 @@ public class ConcurrentUpdateJettySolrClient extends ConcurrentUpdateBaseSolrCli
    * Jetty-specific implementation of StreamingResponse that wraps Jetty's
    * InputStreamResponseListener.
    */
-  private static class JettyStreamingResponse implements StreamingResponse {
+  private static class JettyStreamingResponse
+      implements StreamingResponse<org.eclipse.jetty.client.Response> {
     private final InputStreamResponseListener listener;
     private Response response;
 
@@ -169,7 +171,7 @@ public class ConcurrentUpdateJettySolrClient extends ConcurrentUpdateBaseSolrCli
     }
 
     @Override
-    public Object getUnderlyingResponse() {
+    public org.eclipse.jetty.client.Response getUnderlyingResponse() {
       return response;
     }
 

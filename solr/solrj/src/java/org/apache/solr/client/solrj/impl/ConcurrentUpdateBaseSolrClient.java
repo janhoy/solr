@@ -47,8 +47,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
-/** A ConcurrentUpdate {@link SolrClient} -- it sends updates concurrently and asynchronously. */
-public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
+/**
+ * A ConcurrentUpdate {@link SolrClient} -- it sends updates concurrently and asynchronously.
+ *
+ * @param <R> the type of HTTP response metadata available in the {@link #onSuccess(Object,
+ *     InputStream)} callback. Use {@code org.eclipse.jetty.client.Response} for Jetty-based
+ *     clients, or {@code Void} if response metadata is not needed.
+ */
+public abstract class ConcurrentUpdateBaseSolrClient<R> extends SolrClient {
   // formerly known as ConcurrentUpdateBaseSolrClient
   private static final long serialVersionUID = 1L;
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
@@ -142,7 +148,7 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
     }
   }
 
-  protected ConcurrentUpdateBaseSolrClient(Builder builder) {
+  protected ConcurrentUpdateBaseSolrClient(Builder<?> builder) {
     if (builder.baseSolrUrl == null) {
       throw new IllegalArgumentException(
           "Cannot create HttpSolrClient without a valid baseSolrUrl!");
@@ -244,7 +250,7 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
               break;
             }
 
-            StreamingResponse responseListener = null;
+            StreamingResponse<R> responseListener = null;
             responseListener = doSendUpdateStream(update);
 
             // just wait for the headers, so the idle timeout is sensible
@@ -287,7 +293,7 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
     }
   }
 
-  protected abstract StreamingResponse doSendUpdateStream(Update update)
+  protected abstract StreamingResponse<R> doSendUpdateStream(Update update)
       throws IOException, InterruptedException;
 
   private void consumeFully(InputStream is) {
@@ -551,7 +557,7 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
    *     null
    * @param respBody the body of the response, subclasses must not close this stream.
    */
-  public void onSuccess(Object responseMetadata, InputStream respBody) {
+  public void onSuccess(R responseMetadata, InputStream respBody) {
     // no-op by design, override to add functionality
   }
 
@@ -616,7 +622,7 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
   }
 
   /** Constructs {@link ConcurrentUpdateBaseSolrClient} instances from provided configuration. */
-  public abstract static class Builder {
+  public abstract static class Builder<B extends Builder<B>> {
     protected long idleTimeoutMillis;
     protected HttpSolrClientBase client;
     protected String baseSolrUrl;
@@ -690,12 +696,13 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
      *
      * @see #withThreadCount(int)
      */
-    public Builder withQueueSize(int queueSize) {
+    @SuppressWarnings("unchecked")
+    public B withQueueSize(int queueSize) {
       if (queueSize <= 0) {
         throw new IllegalArgumentException("queueSize must be a positive integer.");
       }
       this.queueSize = queueSize;
-      return this;
+      return (B) this;
     }
 
     /**
@@ -709,22 +716,24 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
      * ConcurrentUpdateBaseSolrClient#request(SolrRequest)} calls block waiting to add requests to
      * the queue.
      */
-    public Builder withThreadCount(int threadCount) {
+    @SuppressWarnings("unchecked")
+    public B withThreadCount(int threadCount) {
       if (threadCount <= 0) {
         throw new IllegalArgumentException("threadCount must be a positive integer.");
       }
 
       this.threadCount = threadCount;
-      return this;
+      return (B) this;
     }
 
     /**
      * Provides the {@link ExecutorService} for the created client to use when servicing the
      * update-request queue.
      */
-    public Builder withExecutorService(ExecutorService executorService) {
+    @SuppressWarnings("unchecked")
+    public B withExecutorService(ExecutorService executorService) {
       this.executorService = executorService;
-      return this;
+      return (B) this;
     }
 
     /**
@@ -732,9 +741,10 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
      *
      * <p>Streamed deletes are put into the update-queue and executed like any other update request.
      */
-    public Builder alwaysStreamDeletes() {
+    @SuppressWarnings("unchecked")
+    public B alwaysStreamDeletes() {
       this.streamDeletes = true;
-      return this;
+      return (B) this;
     }
 
     /**
@@ -744,29 +754,32 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
      * request it will first will lock the queue and block until all queued updates have been sent,
      * and then send the delete request.
      */
-    public Builder neverStreamDeletes() {
+    @SuppressWarnings("unchecked")
+    public B neverStreamDeletes() {
       this.streamDeletes = false;
-      return this;
+      return (B) this;
     }
 
     /** Sets a default for core or collection based requests. */
-    public Builder withDefaultCollection(String defaultCoreOrCollection) {
+    @SuppressWarnings("unchecked")
+    public B withDefaultCollection(String defaultCoreOrCollection) {
       this.defaultCollection = defaultCoreOrCollection;
-      return this;
+      return (B) this;
     }
 
     /**
      * @param pollQueueTime time for an open connection to wait for updates when the queue is empty.
      */
-    public Builder setPollQueueTime(long pollQueueTime, TimeUnit unit) {
+    @SuppressWarnings("unchecked")
+    public B setPollQueueTime(long pollQueueTime, TimeUnit unit) {
       this.pollQueueTimeMillis = TimeUnit.MILLISECONDS.convert(pollQueueTime, unit);
-      return this;
+      return (B) this;
     }
 
     /**
      * Create a {@link ConcurrentUpdateBaseSolrClient} based on the provided configuration options.
      */
-    public abstract ConcurrentUpdateBaseSolrClient build();
+    public abstract ConcurrentUpdateBaseSolrClient<?> build();
 
     public HttpSolrClientBase getClient() {
       return client;
@@ -780,8 +793,12 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
    *
    * <p>Implementations should wrap the underlying HTTP client's response mechanism and provide
    * access to response status and body stream.
+   *
+   * @param <R> the type of the underlying HTTP response object (e.g., {@code
+   *     org.eclipse.jetty.client.Response} for Jetty implementations). May be {@code Void} if no
+   *     response metadata is needed.
    */
-  public interface StreamingResponse extends AutoCloseable {
+  public interface StreamingResponse<R> extends AutoCloseable {
 
     /**
      * Wait for response headers to arrive and return the HTTP status code.
@@ -810,7 +827,7 @@ public abstract class ConcurrentUpdateBaseSolrClient extends SolrClient {
      *
      * @return underlying response object (implementation-specific), may be null
      */
-    Object getUnderlyingResponse();
+    R getUnderlyingResponse();
 
     /**
      * Release resources associated with this response.

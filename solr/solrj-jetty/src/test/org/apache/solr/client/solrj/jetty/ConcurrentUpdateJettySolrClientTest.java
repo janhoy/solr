@@ -362,7 +362,8 @@ public class ConcurrentUpdateJettySolrClientTest extends SolrTestCaseJ4 {
     }
 
     @Override
-    public void onSuccess(Object responseMetadata, InputStream respBody) {
+    public void onSuccess(
+        org.eclipse.jetty.client.Response responseMetadata, InputStream respBody) {
       successCounter.incrementAndGet();
     }
 
