@@ -16,31 +16,16 @@
  */
 package org.apache.solr.cloud.kube;
 
-import static org.apache.solr.SolrTestCaseJ4.assumeWorkingMockito;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import io.kubernetes.client.openapi.ApiException;
-import io.kubernetes.client.openapi.apis.CoreV1Api;
 import io.kubernetes.client.openapi.models.V1ConfigMap;
 import io.kubernetes.client.openapi.models.V1ObjectMeta;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.Map;
 import org.apache.solr.SolrTestCase;
 import org.apache.solr.core.SolrResourceNotFoundException;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class KubernetesSolrResourceLoaderTest extends SolrTestCase {
-
-  @BeforeClass
-  public static void setUpClass() {
-    assumeWorkingMockito();
-  }
 
   private V1ConfigMap makeConfigMap(String configSetName, Map<String, String> data) {
     V1ObjectMeta meta =
@@ -50,24 +35,22 @@ public class KubernetesSolrResourceLoaderTest extends SolrTestCase {
     return new V1ConfigMap().metadata(meta).data(data);
   }
 
-  private KubernetesSolrResourceLoader makeLoader(CoreV1Api api, String configSetName) {
+  private KubernetesSolrResourceLoader makeLoader(
+      Map<String, V1ConfigMap> cache, String configSetName) {
     return new KubernetesSolrResourceLoader(
         createTempDir(),
         configSetName,
         KubernetesSolrResourceLoaderTest.class.getClassLoader(),
-        api);
+        cache);
   }
 
   @Test
   public void testOpenResourceFromConfigMap() throws Exception {
-    CoreV1Api api = mock(CoreV1Api.class, RETURNS_DEEP_STUBS);
     String resource = "solrconfig.xml";
     String content = "<config/>";
     V1ConfigMap cm = makeConfigMap("my-configset", Map.of(resource, content));
-    when(api.listNamespacedConfigMap(any()).labelSelector(any()).execute().getItems())
-        .thenReturn(List.of(cm));
 
-    KubernetesSolrResourceLoader loader = makeLoader(api, "my-configset");
+    KubernetesSolrResourceLoader loader = makeLoader(Map.of("my-configset", cm), "my-configset");
     try (InputStream is = loader.openResource(resource)) {
       String result = new String(is.readAllBytes(), StandardCharsets.UTF_8);
       assertEquals(content, result);
@@ -76,13 +59,10 @@ public class KubernetesSolrResourceLoaderTest extends SolrTestCase {
 
   @Test
   public void testOpenResourceFallbackToClasspath() throws Exception {
-    CoreV1Api api = mock(CoreV1Api.class, RETURNS_DEEP_STUBS);
     // ConfigMap exists but does not contain the requested resource
     V1ConfigMap cm = makeConfigMap("my-configset", Map.of("other-file.xml", "data"));
-    when(api.listNamespacedConfigMap(any()).labelSelector(any()).execute().getItems())
-        .thenReturn(List.of(cm));
 
-    KubernetesSolrResourceLoader loader = makeLoader(api, "my-configset");
+    KubernetesSolrResourceLoader loader = makeLoader(Map.of("my-configset", cm), "my-configset");
     try (InputStream is = loader.openResource("test-classpath-resource.txt")) {
       assertNotNull(is);
       String content = new String(is.readAllBytes(), StandardCharsets.UTF_8);
@@ -92,37 +72,17 @@ public class KubernetesSolrResourceLoaderTest extends SolrTestCase {
 
   @Test
   public void testOpenResourceNotFoundAnywhere() throws Exception {
-    CoreV1Api api = mock(CoreV1Api.class, RETURNS_DEEP_STUBS);
-    when(api.listNamespacedConfigMap(any()).labelSelector(any()).execute().getItems())
-        .thenReturn(List.of());
-
-    KubernetesSolrResourceLoader loader = makeLoader(api, "my-configset");
+    // configSet not in cache, resource not on classpath
+    KubernetesSolrResourceLoader loader = makeLoader(Map.of(), "my-configset");
     assertThrows(
         SolrResourceNotFoundException.class,
         () -> loader.openResource("absolutely-nonexistent-resource.xml"));
   }
 
   @Test
-  public void testApiExceptionFallsBackToClasspath() throws Exception {
-    CoreV1Api api = mock(CoreV1Api.class, RETURNS_DEEP_STUBS);
-    when(api.listNamespacedConfigMap(any()).labelSelector(any()).execute())
-        .thenThrow(new ApiException("simulated Kubernetes API failure"));
-
-    KubernetesSolrResourceLoader loader = makeLoader(api, "my-configset");
-    try (InputStream is = loader.openResource("test-classpath-resource.txt")) {
-      assertNotNull(is);
-    }
-  }
-
-  @Test
-  public void testConfigMapAnnotationMismatchFallsBackToClasspath() throws Exception {
-    CoreV1Api api = mock(CoreV1Api.class, RETURNS_DEEP_STUBS);
-    // ConfigMap has annotation for a different configSet, so filter does not match
-    V1ConfigMap cm = makeConfigMap("other-configset", Map.of("solrconfig.xml", "<config/>"));
-    when(api.listNamespacedConfigMap(any()).labelSelector(any()).execute().getItems())
-        .thenReturn(List.of(cm));
-
-    KubernetesSolrResourceLoader loader = makeLoader(api, "my-configset");
+  public void testConfigSetNotInCache_fallsBackToClasspath() throws Exception {
+    // configSet absent from cache → fall through to classpath
+    KubernetesSolrResourceLoader loader = makeLoader(Map.of(), "my-configset");
     try (InputStream is = loader.openResource("test-classpath-resource.txt")) {
       assertNotNull(is);
     }
@@ -130,8 +90,7 @@ public class KubernetesSolrResourceLoaderTest extends SolrTestCase {
 
   @Test
   public void testGetConfigSetName() {
-    CoreV1Api api = mock(CoreV1Api.class, RETURNS_DEEP_STUBS);
-    KubernetesSolrResourceLoader loader = makeLoader(api, "test-configset");
+    KubernetesSolrResourceLoader loader = makeLoader(Map.of(), "test-configset");
     assertEquals("test-configset", loader.getConfigSetName());
   }
 }

@@ -211,7 +211,15 @@ public class KubernetesConfigSetService extends ConfigSetService {
     String configSetName = cd.getConfigSet();
 
     return new KubernetesSolrResourceLoader(
-        cd.getInstanceDir(), configSetName, parentLoader.getClassLoader(), coreV1Api);
+        cd.getInstanceDir(),
+        configSetName,
+        parentLoader.getClassLoader(),
+        existingConfigSetConfigMaps);
+  }
+
+  /** Package-private: returns the live ConfigMap cache kept up to date by the informer. */
+  Map<String, V1ConfigMap> getConfigMapCache() {
+    return existingConfigSetConfigMaps;
   }
 
   @Override

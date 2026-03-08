@@ -16,20 +16,15 @@
  */
 package org.apache.solr.cloud.kube;
 
-import io.kubernetes.client.openapi.ApiException;
-import io.kubernetes.client.openapi.apis.CoreV1Api;
 import io.kubernetes.client.openapi.models.V1ConfigMap;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.invoke.MethodHandles;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.Locale;
+import java.util.Map;
 import org.apache.solr.core.SolrResourceLoader;
 import org.apache.solr.core.SolrResourceNotFoundException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * ResourceLoader that works with Kubernetes ConfigMaps.
@@ -37,87 +32,53 @@ import org.slf4j.LoggerFactory;
  * <p>This loader attempts to load resources from a Kubernetes ConfigMap corresponding to the
  * configured configSet. If a resource is not found in the ConfigMap, it falls back to the classpath
  * loader.
+ *
+ * <p>Resources are served from the live ConfigMap cache maintained by {@link
+ * KubernetesConfigSetService}. The cache is kept up to date by a Kubernetes informer, so every call
+ * to {@link #openResource(String)} reflects the current state of the ConfigMap without making an
+ * API round-trip.
  */
 public class KubernetesSolrResourceLoader extends SolrResourceLoader {
 
   private final String configSetName;
-  private final String namespace;
-  private final CoreV1Api coreV1Api;
-
-  private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+  private final Map<String, V1ConfigMap> configMapCache;
 
   /**
    * Creates a new KubernetesSolrResourceLoader.
    *
-   * <p>This loader will first attempt to load resources from a Kubernetes ConfigMap for the given
-   * configSet. If not found, it will delegate to the context classloader.
+   * <p>This loader will first attempt to load resources from the provided ConfigMap cache. If not
+   * found, it will delegate to the context classloader.
    *
    * @param instanceDir the instance directory for the core
-   * @param configSetName the name of the configSet (used to look up the ConfigMap)
+   * @param configSetName the name of the configSet (used to look up the ConfigMap in the cache)
    * @param parent the parent classloader
-   * @param coreV1Api the Kubernetes CoreV1Api client
+   * @param configMapCache the live ConfigMap cache (keyed by configSet name), kept up to date by
+   *     the Kubernetes informer in {@link KubernetesConfigSetService}
    */
   public KubernetesSolrResourceLoader(
-      Path instanceDir, String configSetName, ClassLoader parent, CoreV1Api coreV1Api) {
+      Path instanceDir,
+      String configSetName,
+      ClassLoader parent,
+      Map<String, V1ConfigMap> configMapCache) {
     super(instanceDir, parent);
     this.configSetName = configSetName;
-    this.coreV1Api = coreV1Api;
-    this.namespace = System.getenv(KubernetesConfigSetService.POD_NAMESPACE_ENV_VAR);
+    this.configMapCache = configMapCache;
   }
 
   /**
-   * Opens any resource by its name. First attempts to load the resource from the Kubernetes
+   * Opens any resource by its name. First attempts to load the resource from the cached Kubernetes
    * ConfigMap for the configSet. If not found, delegates to the parent classloader.
    *
    * @return the stream for the named resource
    */
   @Override
   public InputStream openResource(String resource) throws IOException {
-    // Try to get the resource from the Kubernetes ConfigMap
-    try {
-      // TODO: Cache the ConfigMap locally rather than fetching from the API each time.
-      // Consider passing in the existingConfigSetConfigMaps cache from KubernetesConfigSetService.
-      String solrCloudName = System.getenv(KubernetesConfigSetService.SOLR_CLOUD_NAME_ENV_VAR);
-      String labelSelector =
-          String.format(
-              Locale.ROOT,
-              "%s=%s",
-              String.format(
-                  Locale.ROOT, KubernetesConfigSetService.CONFIG_SET_LABEL_KEY, solrCloudName),
-              KubernetesConfigSetService.CONFIG_SET_LABEL_VALUE);
-
-      V1ConfigMap configMap =
-          coreV1Api
-              .listNamespacedConfigMap(namespace)
-              .labelSelector(labelSelector)
-              .execute()
-              .getItems()
-              .stream()
-              .filter(
-                  cm -> {
-                    if (cm.getMetadata() == null || cm.getMetadata().getAnnotations() == null) {
-                      return false;
-                    }
-                    return configSetName.equals(
-                        cm.getMetadata()
-                            .getAnnotations()
-                            .get(KubernetesConfigSetService.CONFIG_SET_NAME_ANNOTATION_KEY));
-                  })
-              .findFirst()
-              .orElse(null);
-
-      if (configMap != null && configMap.getData() != null) {
-        String data = configMap.getData().get(resource);
-        if (data != null) {
-          return new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8));
-        }
+    V1ConfigMap configMap = configMapCache.get(configSetName);
+    if (configMap != null && configMap.getData() != null) {
+      String data = configMap.getData().get(resource);
+      if (data != null) {
+        return new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8));
       }
-    } catch (ApiException e) {
-      log.warn(
-          "Could not retrieve resource '{}' from Kubernetes ConfigMap for configSet '{}'",
-          resource,
-          configSetName,
-          e);
     }
 
     // Fall back to the classpath loader
