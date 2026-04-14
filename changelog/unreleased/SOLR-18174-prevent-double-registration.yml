@@ -1,0 +1,8 @@
+title: "Fix permit leak in HttpJettySolrClient's AsyncTracker when Jetty fires onRequestQueued twice for the same request"
+type: fixed
+authors:
+  - name: Jan Høydahl
+    url: https://home.apache.org/phonebook.html?uid=janhoy
+links:
+  - name: SOLR-18174
+    url: https://issues.apache.org/jira/browse/SOLR-18174

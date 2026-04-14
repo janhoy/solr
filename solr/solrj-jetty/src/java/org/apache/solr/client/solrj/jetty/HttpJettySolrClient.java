@@ -111,6 +111,11 @@ public class HttpJettySolrClient extends HttpSolrClientBase {
   public static final String CLIENT_CUSTOMIZER_SYSPROP = "solr.solrj.http.jetty.customizer";
 
   public static final String REQ_PRINCIPAL_KEY = "solr-req-principal";
+
+  // SOLR-18174: guards against Jetty firing onRequestQueued twice (idle-timeout race / GOAWAY
+  // resend).
+  static final String PERMIT_ACQUIRED_ATTR = "solr.permit_acquired";
+
   private static final String USER_AGENT =
       "Solr[" + MethodHandles.lookup().lookupClass().getName() + "] " + SolrVersion.LATEST_STRING;
 
@@ -843,12 +848,25 @@ public class HttpJettySolrClient extends HttpSolrClientBase {
     private final Request.QueuedListener queuedListener;
     private final Response.CompleteListener completeListener;
 
+    // Per-request permit tracking (identity-keyed on Request objects).
+    private final java.util.concurrent.ConcurrentHashMap<Request, Boolean> inFlightRequests =
+        new java.util.concurrent.ConcurrentHashMap<>();
+
     AsyncTracker() {
       // TODO: what about shared instances?
       phaser = new Phaser(1);
       available = new Semaphore(MAX_OUTSTANDING_REQUESTS, false);
       queuedListener =
           request -> {
+            // Idempotency guard: see comment on PERMIT_ACQUIRED_ATTR
+            if (request.getAttributes().get(PERMIT_ACQUIRED_ATTR) != null) {
+              if (log.isDebugEnabled()) {
+                log.debug("Jetty fired queuedListener twice — semaphore permit leak prevented");
+              }
+              return;
+            }
+            request.attribute(PERMIT_ACQUIRED_ATTR, Boolean.TRUE);
+            inFlightRequests.put(request, Boolean.TRUE);
             phaser.register();
             try {
               available.acquire();
@@ -858,6 +876,13 @@ public class HttpJettySolrClient extends HttpSolrClientBase {
           };
       completeListener =
           result -> {
+            // Skip if request was never queued (e.g. destination failed before onRequestQueued).
+            if (result == null || inFlightRequests.remove(result.getRequest()) == null) {
+              if (log.isDebugEnabled()) {
+                log.debug("Request was not queued, not releasing semaphore permit");
+              }
+              return;
+            }
             phaser.arriveAndDeregister();
             available.release();
           };
