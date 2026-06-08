@@ -632,17 +632,80 @@ def get_dep_version_at_tag(solr_checkout, tag, group_artifact):
         return None
 
 
-def compute_affected_version_range(solr_checkout, group_artifact, vulnerable_version, scanned_version):
+def _parse_version(version_str):
+    """Parse a version string, handling Maven suffixes like .Final, .Alpha1, -M3."""
+    from packaging.version import Version, InvalidVersion
+    # Strip common Maven qualifiers that packaging doesn't understand
+    cleaned = re.sub(r"\.(Final|Release)$", "", version_str, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\.Alpha(\d+)$", r"a\1", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\.Beta(\d+)$", r"b\1", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\.CR(\d+)$", r"rc\1", cleaned, flags=re.IGNORECASE)
+    try:
+        return Version(cleaned)
+    except InvalidVersion:
+        return None
+
+
+def is_version_in_range(version_str, range_str):
+    """
+    Check if a version falls within a SARIF affected_version range.
+
+    Range format examples:
+      "<2.5.9"                          → version < 2.5.9
+      "<=4.2.12.Final"                  → version <= 4.2.12.Final
+      ">=1.0,<=1.10.1"                  → 1.0 <= version <= 1.10.1
+      ">=4.2.0.Alpha1,<4.2.10.Final"    → 4.2.0a1 <= version < 4.2.10
+      ">=0"                             → all versions
+    """
+    ver = _parse_version(version_str)
+    if ver is None:
+        log.debug("Could not parse version: %s", version_str)
+        return False
+    if not range_str:
+        return False
+
+    for constraint in range_str.split(","):
+        constraint = constraint.strip()
+        if not constraint:
+            continue
+
+        if constraint.startswith("<="):
+            bound = _parse_version(constraint[2:])
+            if bound is not None and not (ver <= bound):
+                return False
+        elif constraint.startswith("<"):
+            bound = _parse_version(constraint[1:])
+            if bound is not None and not (ver < bound):
+                return False
+        elif constraint.startswith(">="):
+            bound = _parse_version(constraint[2:])
+            if bound is not None and not (ver >= bound):
+                return False
+        elif constraint.startswith(">"):
+            bound = _parse_version(constraint[1:])
+            if bound is not None and not (ver > bound):
+                return False
+        elif constraint.startswith("="):
+            bound = _parse_version(constraint[1:])
+            if bound is not None and not (ver == bound):
+                return False
+
+    return True
+
+
+def compute_affected_version_range(solr_checkout, group_artifact, affected_range, scanned_version):
     """
     Walk release tags to find the range of Solr versions affected by a vulnerable dependency.
 
-    Returns a free-text string like "9.9.0–10.0.0" for use in VEX versions field.
+    Uses the CVE's affected version range (from SARIF) to check each Solr release,
+    not just exact version matching.
+
+    Returns a free-text string like "9.8.0–10.0.0" for use in VEX versions field.
     """
     tags = get_release_tags(solr_checkout)
     if not tags:
         return scanned_version
 
-    # Find the scanned version in the tag list
     if scanned_version not in tags:
         return scanned_version
 
@@ -654,13 +717,11 @@ def compute_affected_version_range(solr_checkout, group_artifact, vulnerable_ver
         tag = tags[i]
         dep_ver = get_dep_version_at_tag(solr_checkout, tag, group_artifact)
         if dep_ver is None:
-            # Dependency not present in this version — stop
-            break
-        if dep_ver == vulnerable_version:
+            break  # dependency not present in this version
+        if affected_range and is_version_in_range(dep_ver, affected_range):
             first_affected = tag
         else:
-            # Different version — stop (could be older vulnerable or already fixed)
-            break
+            break  # dep present but not in vulnerable range
 
     if first_affected == scanned_version:
         return scanned_version
@@ -739,6 +800,7 @@ def filter_app_cves(sarif, severities):
                 "cvss_score": cvss_score,
                 "description": description[:2000],  # truncate very long descriptions
                 "urls": help_uri,
+                "affected_version_range": props.get("affected_version", ""),
             })
 
     log.info(
@@ -1140,6 +1202,9 @@ def analyze_cve_group_with_llm(cves, solr_checkout, api_key, model, solr_version
             )
             results = _parse_grouped_llm_response(final_text, cves)
             for r in results:
+                # Forced conclusion = incomplete analysis → always in_triage
+                r["state"] = "in_triage"
+                r["justification"] = ""
                 r["input_tokens"] = total_input_tokens // len(cves)
                 r["output_tokens"] = total_output_tokens // len(cves)
             return results
@@ -1548,7 +1613,8 @@ def main():
 
             # Compute affected Solr version range (local git, no LLM tokens)
             version_range = compute_affected_version_range(
-                solr_checkout, group_cves[0]["package"], group_cves[0]["version"], args.solr_version,
+                solr_checkout, group_cves[0]["package"],
+                group_cves[0].get("affected_version_range", ""), args.solr_version,
             )
             print(f"    📋 Affected Solr versions: {version_range}")
 
