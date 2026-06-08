@@ -49,7 +49,6 @@ import json
 import logging
 import os
 import re
-import shutil
 import subprocess
 import sys
 import textwrap
@@ -60,7 +59,7 @@ from datetime import date
 # Lazy imports with helpful error messages
 # ---------------------------------------------------------------------------
 
-def _try_import(module_name, pip_name=None):
+def _try_import(module_name):
     """Import a module, return None if missing."""
     try:
         return __import__(module_name)
@@ -68,7 +67,7 @@ def _try_import(module_name, pip_name=None):
         return None
 
 
-yaml = _try_import("yaml", "PyYAML")
+yaml = _try_import("yaml")
 requests = _try_import("requests")
 anthropic = _try_import("anthropic")
 
@@ -395,9 +394,9 @@ def resolve_solr_branches(solr_version):
 
     Returns a dict mapping branch description to branch name, e.g.:
       For 10.0.0: {"release": "branch_10_0", "next_minor": "branch_10x",
-                    "other_major": "branch_9x", "main": "main"}
+                    "9.x": "branch_9x", "main": "main"}
       For 9.10.1: {"release": "branch_9_10", "next_minor": "branch_9x",
-                    "other_major": "branch_10x", "main": "main"}
+                    "10.x": "branch_10x", "main": "main"}
     """
     parts = solr_version.split(".")
     if len(parts) < 3:
@@ -407,15 +406,16 @@ def resolve_solr_branches(solr_version):
     branches = {}
     branches["release"] = f"branch_{major}_{minor}"
     branches["next_minor"] = f"branch_{major}x"
-    # Include the other active major line (9.x ↔ 10.x)
-    other_major = major + 1 if major == 9 else major - 1
-    if other_major >= 9:
-        branches["other_major"] = f"branch_{other_major}x"
+    # Include the adjacent major line (e.g. 9.x ↔ 10.x, 10.x ↔ 11.x)
+    for adj in [major - 1, major + 1]:
+        if adj >= 9 and adj != major:
+            branches[f"{adj}.x"] = f"branch_{adj}x"
+            break  # only include the closest active line
     branches["main"] = "main"
     return branches
 
 
-def resolve_next_version(solr_version, branches):
+def resolve_next_version(solr_version):
     """
     Determine the likely next release version.
 
@@ -492,7 +492,8 @@ def _get_dep_version_from_lockfiles(solr_checkout, group_artifact, branch):
         if versions:
             return sorted(versions)[-1], sorted(versions)
         return None, []
-    except Exception:
+    except Exception as e:
+        log.debug("Lockfile lookup failed for %s on %s: %s", group_artifact, branch, e)
         return None, []
 
 
@@ -506,7 +507,7 @@ def gather_branch_version_info(solr_checkout, package, solr_version):
     Returns a formatted string for inclusion in the LLM prompt.
     """
     branches = resolve_solr_branches(solr_version)
-    next_ver = resolve_next_version(solr_version, branches)
+    next_ver = resolve_next_version(solr_version)
 
     # package is "group:artifact" — exactly the format used in lockfiles
     group_artifact = package
@@ -583,7 +584,8 @@ def get_release_tags(solr_checkout):
         # Sort by version components
         tags.sort(key=lambda v: [int(x) for x in v.split(".")[:3] if x.isdigit()])
         return tags
-    except Exception:
+    except Exception as e:
+        log.debug("Failed to list release tags: %s", e)
         return []
 
 
@@ -625,7 +627,8 @@ def get_dep_version_at_tag(solr_checkout, tag, group_artifact):
                         return parts[2].strip()
 
         return None
-    except Exception:
+    except Exception as e:
+        log.debug("Version lookup failed for %s at tag %s: %s", group_artifact, tag, e)
         return None
 
 
@@ -736,7 +739,6 @@ def filter_app_cves(sarif, severities):
                 "cvss_score": cvss_score,
                 "description": description[:2000],  # truncate very long descriptions
                 "urls": help_uri,
-                "purls": maven_purls,
             })
 
     log.info(
@@ -844,8 +846,8 @@ def scan_local_vex_dir(output_dir):
                 with open(fpath, "r", encoding="utf-8") as f:
                     content = f.read(1000)  # front matter is at the top
                 cves.update(CVE_PATTERN.findall(content))
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("Could not read VEX file %s: %s", fname, e)
     if cves:
         log.info("Found %d CVEs in local VEX files in %s", len(cves), output_dir)
     return cves
@@ -922,7 +924,11 @@ def _execute_tool(tool_name, tool_input, solr_checkout):
                 all_lines = f.readlines()
             total = len(all_lines)
             start = max(0, tool_input.get("start_line", 1) - 1)  # 1-based to 0-based
-            end = tool_input.get("end_line", start + 200)
+            # end_line is 1-based inclusive; convert to 0-based exclusive for slice
+            if "end_line" in tool_input:
+                end = tool_input["end_line"]  # 1-based inclusive → 0-based exclusive
+            else:
+                end = start + 200
             end = min(end, start + 200)  # cap at 200 lines per read
             lines = all_lines[start:end]
             header = f"[lines {start + 1}-{min(end, total)} of {total}]\n"
@@ -1121,23 +1127,16 @@ def analyze_cve_group_with_llm(cves, solr_checkout, api_key, model, solr_version
         messages.append({"role": "user", "content": tool_results})
 
         # Check limits — force a conclusion if exceeded
+        limit_reason = None
         if total_input_tokens >= max_input_tokens:
+            limit_reason = (f"Token budget reached ({total_input_tokens:,} >= "
+                            f"{max_input_tokens:,}) after {iteration} iterations")
+        elif iteration >= max_iterations:
+            limit_reason = f"Iteration limit reached ({iteration} >= {max_iterations})"
+        if limit_reason:
             final_text, total_input_tokens, total_output_tokens = _force_conclusion(
                 client, model, messages,
-                total_input_tokens, total_output_tokens,
-                f"Token budget reached ({total_input_tokens:,} >= {max_input_tokens:,}) "
-                f"after {iteration} iterations",
-            )
-            results = _parse_grouped_llm_response(final_text, cves)
-            for r in results:
-                r["input_tokens"] = total_input_tokens // len(cves)
-                r["output_tokens"] = total_output_tokens // len(cves)
-            return results
-        if iteration >= max_iterations:
-            final_text, total_input_tokens, total_output_tokens = _force_conclusion(
-                client, model, messages,
-                total_input_tokens, total_output_tokens,
-                f"Iteration limit reached ({iteration} >= {max_iterations})",
+                total_input_tokens, total_output_tokens, limit_reason,
             )
             results = _parse_grouped_llm_response(final_text, cves)
             for r in results:
@@ -1401,10 +1400,10 @@ def parse_args():
         help="Comma-separated GitHub usernames to request review on PRs",
     )
     parser.add_argument(
-        "--model", default="balanced",
+        "--model", default="best",
         choices=["best", "balanced", "fast"],
-        help="LLM quality/cost tradeoff: best (Opus, most capable, expensive), "
-             "balanced (Sonnet, good tradeoff, default), fast (Haiku, cheapest/fastest)",
+        help="LLM quality/cost tradeoff: best (Opus, most capable, default), "
+             "balanced (Sonnet, cheaper), fast (Haiku, cheapest/fastest)",
     )
     parser.add_argument(
         "--max-iterations", type=int, default=25,
@@ -1505,8 +1504,6 @@ def main():
         _severity_order.get(c["severity"], 9),
         -float(c["cvss_score"]) if c["cvss_score"] != "N/A" else 0,
     ))
-    if skipped:
-        print(f"Skipped {skipped} CVE(s) already covered by VEX or open PRs")
 
     if not new_cves:
         print("All CVEs are already covered. Nothing to do.")
@@ -1662,7 +1659,7 @@ def main():
 
     # Summary
     model = MODEL_ALIASES.get(args.model, args.model) if not args.skip_llm else None
-    print(f"\n=== Summary ===")
+    print("\n=== Summary ===")
     print(f"Image scanned:    {image}")
     print(f"Total app CVEs:   {len(cves)}")
     print(f"Already covered:  {skipped}")
