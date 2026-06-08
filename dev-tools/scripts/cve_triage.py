@@ -1210,6 +1210,87 @@ def analyze_cve_group_with_llm(cves, solr_checkout, api_key, model, solr_version
             return results
 
 
+def _cross_major_check(cve, primary_analysis, solr_checkout, other_tag,
+                       api_key, model):
+    """
+    Lightweight cross-check: does the primary analysis hold for another major version?
+
+    Greps the other version's source for the same library usage, then asks the LLM
+    (in a single prompt, no tool calls) whether the assessment changes.
+
+    Returns None if the assessment is the same, or a new analysis dict if it differs.
+    """
+    package = cve["package"]
+    # Quick grep: how does the other version use the library?
+    artifact = package.split(":")[-1] if ":" in package else package
+    ref = f"releases/solr/{other_tag}"
+
+    grep_result = subprocess.run(
+        ["git", "grep", "-rn", "--count", artifact, ref, "--", "*.java", "*.gradle"],
+        capture_output=True, text=True, timeout=15,
+        cwd=solr_checkout,
+    )
+    other_usage = grep_result.stdout.strip() if grep_result.returncode == 0 else ""
+
+    if not other_usage:
+        # Library not used in the other major version's source
+        return None
+
+    # Format: show file match counts only (not full content) to save tokens
+    usage_lines = other_usage.split("\n")[:20]
+    usage_summary = "\n".join(
+        line.replace(f"{ref}:", "") for line in usage_lines
+    )
+
+    prompt = textwrap.dedent(f"""\
+        You previously analyzed {cve['cve_id']} ({package}) for Solr {primary_analysis.get('_scanned_version', '?')}
+        and concluded: state={primary_analysis['state']}.
+
+        Your reasoning was:
+        {primary_analysis.get('reasoning', '(none)')[:1500]}
+
+        Now consider Solr {other_tag}, which also ships a vulnerable version of this library.
+        Here is the usage of "{artifact}" in Solr {other_tag}'s source (file match counts):
+        {usage_summary}
+
+        Does your assessment change for Solr {other_tag}? If the library is used the
+        same way, answer "SAME". If usage differs materially (different modules, different
+        code paths, different exposure), respond with a JSON object:
+        {{"state": "...", "justification": "...", "reasoning": "...short explanation..."}}
+
+        Respond with ONLY "SAME" or the JSON object.
+    """)
+
+    client = anthropic.Anthropic(api_key=api_key)
+    response = _llm_create_with_retry(
+        client, model=model, max_tokens=2048,
+        system="You are a security analyst doing a quick cross-version comparison.",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = "".join(b.text for b in response.content if b.type == "text").strip()
+    print(f"    🔄 Cross-major check for {other_tag}: {text[:60]}...")
+
+    if text.upper().startswith("SAME"):
+        return None
+
+    # Parse the differing assessment
+    json_match = re.search(r"\{[\s\S]*\}", text)
+    if json_match:
+        try:
+            data = json.loads(json_match.group())
+            return _sanitize_analysis({
+                "state": data.get("state", "in_triage"),
+                "justification": data.get("justification", ""),
+                "reasoning": data.get("reasoning", text),
+                "affected_jars": primary_analysis.get("affected_jars", []),
+                "llm_analyzed": True,
+            })
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
 def _print_tool_call(iteration, tool_block):
     """Print a human-readable summary of what tool the LLM is calling."""
     name = tool_block.name
@@ -1488,6 +1569,12 @@ def parse_args():
              "Skips the VEX/PR deduplication filters.",
     )
     parser.add_argument(
+        "--no-analyze-majors", action="store_false", dest="analyze_majors", default=True,
+        help="Disable cross-major version check. By default, when a CVE affects both "
+             "major version lines (e.g. 9.x and 10.x), a lightweight cross-check verifies "
+             "the assessment applies to both.",
+    )
+    parser.add_argument(
         "--severity", default="CRITICAL,HIGH",
         help="Comma-separated severity levels to include (default: CRITICAL,HIGH)",
     )
@@ -1678,6 +1765,108 @@ def main():
     if not analyzed:
         print("No CVEs were analyzed.")
         sys.exit(0)
+
+    # Step 4b: Cross-major check (if --analyze-majors and LLM was used)
+    if args.analyze_majors and not args.skip_llm:
+        all_tags = get_release_tags(solr_checkout)
+        major = args.solr_version.split(".")[0]
+        # Find the other major's latest release tag
+        other_major_tags = [t for t in all_tags if not t.startswith(f"{major}.")]
+        if other_major_tags:
+            other_latest = other_major_tags[-1]
+            print(f"\n=== Cross-major check against Solr {other_latest} ===")
+            api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            model = MODEL_ALIASES.get(args.model, args.model)
+            for i, (cve, analysis) in enumerate(analyzed):
+                if not analysis.get("llm_analyzed"):
+                    continue
+                # Check if the dep is also vulnerable in the other major
+                other_dep_ver = get_dep_version_at_tag(
+                    solr_checkout, other_latest, cve["package"]
+                )
+                affected_range = cve.get("affected_version_range", "")
+                if other_dep_ver and affected_range and is_version_in_range(other_dep_ver, affected_range):
+                    analysis["_scanned_version"] = args.solr_version
+                    alt = _cross_major_check(
+                        cve, analysis, solr_checkout, other_latest,
+                        api_key, model,
+                    )
+                    if alt is not None:
+                        print(f"    ⚠️  {cve['cve_id']}: cross-check sees differences for {other_latest}, "
+                              f"running full analysis...")
+                        # Run a full agentic analysis against the other major's code
+                        other_worktree = _setup_analysis_worktree(
+                            solr_checkout, f"releases/solr/{other_latest}")
+                        try:
+                            other_branch_versions = gather_branch_version_info(
+                                solr_checkout, cve["package"], other_latest)
+                            other_results = analyze_cve_group_with_llm(
+                                [cve], other_worktree, api_key, model, other_latest,
+                                max_iterations=args.max_iterations,
+                                max_input_tokens=args.max_input_tokens,
+                                branch_versions=other_branch_versions,
+                                recent_releases=recent_releases,
+                            )
+                            full_alt = other_results[0] if other_results else None
+                        except Exception as e:
+                            log.error("Full cross-major analysis failed for %s: %s",
+                                      cve["cve_id"], e)
+                            full_alt = None
+                        finally:
+                            _cleanup_analysis_worktree(solr_checkout, other_worktree)
+
+                        other_major_num = other_latest.split(".")[0]
+                        if full_alt and full_alt.get("state") != analysis["state"]:
+                            # States truly differ
+                            print(f"    ⚠️  {cve['cve_id']}: confirmed different: "
+                                  f"{analysis['state']} (primary) vs {full_alt['state']} ({other_latest})")
+
+                            # Helper: compute version range for just one major line
+                            def _major_range(maj):
+                                tags_in_major = [t for t in all_tags if t.startswith(f"{maj}.")]
+                                affected_tags = [t for t in tags_in_major
+                                                 if get_dep_version_at_tag(solr_checkout, t, cve["package"])
+                                                 and is_version_in_range(
+                                                     get_dep_version_at_tag(solr_checkout, t, cve["package"]),
+                                                     affected_range)]
+                                if not affected_tags:
+                                    return None
+                                if len(affected_tags) == 1:
+                                    return affected_tags[0]
+                                return f"{affected_tags[0]}–{affected_tags[-1]}"
+
+                            if analysis["state"] == "affected":
+                                # Case A: primary=affected, other=not_affected
+                                # → Replace primary with the not_affected entry for the other major
+                                other_range = _major_range(other_major_num)
+                                if other_range:
+                                    full_alt["version_range"] = other_range
+                                    full_alt["reasoning"] = (
+                                        full_alt.get("reasoning", "") +
+                                        f"\n\n**Note:** Solr {major}.x is affected by this CVE "
+                                        f"due to differences in how the library is used."
+                                    )
+                                    # Replace the primary analysis with the not_affected one
+                                    analyzed[i] = (cve, full_alt)
+                            else:
+                                # Case B: primary=not_affected, other=affected
+                                # → Narrow primary VEX to scanned major only
+                                primary_range = _major_range(major)
+                                if primary_range:
+                                    analysis["version_range"] = primary_range
+                                    analysis["reasoning"] = (
+                                        analysis.get("reasoning", "") +
+                                        f"\n\n**Note:** Solr {other_major_num}.x is affected by "
+                                        f"this CVE due to differences in how the library is used."
+                                    )
+                        elif full_alt and full_alt.get("state") == analysis["state"]:
+                            # Full analysis confirms same state — keep combined range
+                            print(f"    ✅ {cve['cve_id']}: full analysis confirms same state for {other_latest}")
+                        else:
+                            # Full analysis failed — keep combined range conservatively
+                            print(f"    ⚠️  {cve['cve_id']}: cross-major analysis failed, keeping combined range")
+                    else:
+                        print(f"    ✅ {cve['cve_id']}: same assessment for {other_latest}")
 
     # Step 5: Output
     if args.dry_run:
