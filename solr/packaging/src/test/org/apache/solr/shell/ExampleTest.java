@@ -17,7 +17,8 @@
 
 package org.apache.solr.shell;
 
-import org.apache.solr.shell.exec.Shell;
+import org.apache.solr.cats.EnabledOnShell;
+import org.apache.solr.cats.exec.Shell;
 import org.junit.BeforeClass;
 import org.junit.Test;
 

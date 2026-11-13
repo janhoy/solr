@@ -22,7 +22,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import org.apache.lucene.util.IOUtils;
-import org.apache.solr.shell.exec.Shell;
+import org.apache.solr.cats.EnabledOnShell;
+import org.apache.solr.cats.exec.Shell;
 import org.junit.Before;
 import org.junit.Test;
 

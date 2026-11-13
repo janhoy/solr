@@ -29,6 +29,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Supplier;
+import org.apache.solr.cats.env.PortBlocks;
 import org.apache.solr.cli.SolrProcessManager;
 import org.apache.solr.shell.Cli;
 import org.apache.solr.shell.exec.SolrNodes;
@@ -221,7 +222,7 @@ public final class HarnessEnv {
     }
     String seed = lookup("SOLR_PORT_BASE");
     int seedBase = (seed == null || seed.isBlank()) ? -1 : Integer.parseInt(seed.trim());
-    return PortBlocks.claim(outputDir, seedBase);
+    return Ports.fromBase(PortBlocks.claim(outputDir, seedBase));
   }
 
   /** Whether the given local port can be bound right now. */

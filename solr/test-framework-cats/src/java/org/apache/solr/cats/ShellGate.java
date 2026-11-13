@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell;
+package org.apache.solr.cats;
 
 import static org.junit.Assume.assumeTrue;
 
 import java.util.List;
-import org.apache.solr.shell.exec.Shell;
+import org.apache.solr.cats.exec.Shell;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
@@ -28,7 +28,7 @@ import org.junit.runners.model.Statement;
 /**
  * Honours {@link EnabledOnShell} on a test method, skipping it on any other shell.
  *
- * <p>{@link SolrShellTestCase} applies this itself. A test that drives the harness without needing
+ * <p>{@code SolrShellTestCase} applies this itself. A test that drives the harness without needing
  * a Solr distribution — and so does not extend it — adds the rule:
  *
  * <pre>

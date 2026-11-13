@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.exec;
+package org.apache.solr.cats.exec;
 
 import java.nio.file.Path;
 import java.time.Duration;

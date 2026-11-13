@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.exec;
+package org.apache.solr.cats.exec;
 
 import java.time.Duration;
 import java.util.List;
@@ -32,7 +32,7 @@ public final class ProcessKill {
    *
    * <p>A detached Solr node ({@code nohup} on Unix, {@code start /B} on Windows) is re-parented
    * once its launching shell exits, so it will generally <em>not</em> be a descendant of anything
-   * the harness started — {@link SolrNodes} is how the harness finds Solr. This method is for a
+   * the harness started — {@code SolrNodes} is how the harness finds Solr. This method is for a
    * command process that overran its timeout, and for a PID discovery returned.
    *
    * @return whether the process is no longer alive

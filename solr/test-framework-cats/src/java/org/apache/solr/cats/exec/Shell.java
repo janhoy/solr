@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.exec;
+package org.apache.solr.cats.exec;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -129,6 +129,7 @@ public enum Shell {
     return !line.contains("\n") && !CMD_SYNTAX_LINE.matcher(line).find();
   }
 
+  // TODO G4.4: cats.shell / CATS_SHELL, read by Shells.current()
   /** System property that overrides the shell choice. */
   public static final String SHELL_SYSPROP = "solr.cli.shell";
 

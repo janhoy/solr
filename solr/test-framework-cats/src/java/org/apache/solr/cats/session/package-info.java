@@ -15,19 +15,5 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.exec;
-
-/**
- * Everything a scope has run so far, for a failure message to quote.
- *
- * <p>An interface so that {@link CommandResult}, which is what a test holds when it asserts, can
- * reach the running transcript without this package knowing about sessions.
- */
-public interface CommandHistory {
-
-  /** The commands run so far, in order, each with its exit status and output. */
-  String text();
-
-  /** A history that has nothing to show, for a result built outside a session. */
-  CommandHistory EMPTY = () -> "";
-}
+/** A test's session with the program under test: running commands, transcripts, HTTP helpers */
+package org.apache.solr.cats.session;

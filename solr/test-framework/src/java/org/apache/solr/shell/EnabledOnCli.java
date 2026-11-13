@@ -40,7 +40,7 @@ import java.lang.annotation.Target;
  * nothing on the other implementation.
  *
  * @see Cli
- * @see EnabledOnShell
+ * @see org.apache.solr.cats.EnabledOnShell
  */
 @Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)

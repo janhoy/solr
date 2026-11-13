@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.exec;
+package org.apache.solr.cats.exec;
 
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -97,6 +97,7 @@ public final class Variables {
   /** The harness' own variables, which is what a typo is almost always a near-miss of. */
   private static String definedNames(Map<String, String> vars) {
     return vars.keySet().stream()
+        // TODO G3.2: take the prefixes from CatsHarnessEnv.echoedPrefixes()
         .filter(k -> k.startsWith("SOLR") || k.startsWith("ZK_") || k.startsWith("TEST_"))
         .sorted()
         .toList()

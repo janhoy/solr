@@ -39,10 +39,10 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
-import org.apache.solr.shell.exec.CommandResult;
-import org.apache.solr.shell.exec.Shell;
-import org.apache.solr.shell.exec.ShellAssertionError;
-import org.apache.solr.shell.exec.Variables;
+import org.apache.solr.cats.exec.CommandResult;
+import org.apache.solr.cats.exec.Shell;
+import org.apache.solr.cats.exec.ShellAssertionError;
+import org.apache.solr.cats.exec.Variables;
 
 /**
  * The Solr-aware conveniences a shell test reaches for, ported from {@code bats_helper.bash}.

@@ -51,18 +51,19 @@ import java.util.function.BooleanSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
-import org.apache.lucene.util.IOUtils;
-import org.apache.lucene.util.SuppressForbidden;
+import org.apache.solr.cats.SuppressForbidden;
+import org.apache.solr.cats.exec.CatsFiles;
+import org.apache.solr.cats.exec.CommandResult;
+import org.apache.solr.cats.exec.ProcessKill;
+import org.apache.solr.cats.exec.Shell;
+import org.apache.solr.cats.exec.ShellAssertionError;
+import org.apache.solr.cats.exec.ShellExecutor;
+import org.apache.solr.cats.exec.Variables;
+import org.apache.solr.cats.session.Transcript;
 import org.apache.solr.cli.SolrProcessManager.SolrProcess;
 import org.apache.solr.shell.env.HarnessEnv;
 import org.apache.solr.shell.env.Ports;
-import org.apache.solr.shell.exec.CommandResult;
-import org.apache.solr.shell.exec.ProcessKill;
-import org.apache.solr.shell.exec.Shell;
-import org.apache.solr.shell.exec.ShellAssertionError;
-import org.apache.solr.shell.exec.ShellExecutor;
 import org.apache.solr.shell.exec.SolrNodes;
-import org.apache.solr.shell.exec.Variables;
 import org.junit.AssumptionViolatedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -335,7 +336,7 @@ public class CliSession implements AutoCloseable {
     Path target = path(path);
     try {
       if (Files.isDirectory(target)) {
-        IOUtils.rm(target);
+        CatsFiles.rm(target);
       } else {
         Files.deleteIfExists(target);
       }
@@ -519,7 +520,7 @@ public class CliSession implements AutoCloseable {
    * Turns off the cross-shell portability rails for this session.
    *
    * <p>For a test that has already declared itself one shell's with {@link
-   * org.apache.solr.shell.EnabledOnShell} — set automatically there. Such a test may use that
+   * org.apache.solr.cats.EnabledOnShell} — set automatically there. Such a test may use that
    * shell's pipes, quoting and tools freely, since there is no other shell for it to break on.
    */
   public CliSession allowShellSpecific() {

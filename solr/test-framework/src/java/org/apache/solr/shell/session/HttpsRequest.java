@@ -33,7 +33,8 @@ import java.util.Base64;
 import java.util.Map;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
-import org.apache.solr.shell.exec.Shell;
+import org.apache.solr.cats.exec.Shell;
+import org.apache.solr.cats.session.Transcript;
 import org.apache.solr.shell.session.SolrCliHelpers.HttpResult;
 
 /**

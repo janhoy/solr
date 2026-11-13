@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.session;
+package org.apache.solr.cats.session;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -24,8 +24,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Locale;
 import java.util.Map;
-import org.apache.solr.shell.exec.CommandHistory;
-import org.apache.solr.shell.exec.CommandResult;
+import org.apache.solr.cats.exec.CommandHistory;
+import org.apache.solr.cats.exec.CommandResult;
 
 /**
  * The record of what a scope has run, written to {@code transcript.log} as it goes and kept in

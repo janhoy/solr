@@ -31,14 +31,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
-import org.apache.lucene.util.IOUtils;
 import org.apache.solr.SolrTestCase;
+import org.apache.solr.cats.EnabledOnShell;
+import org.apache.solr.cats.ShellGate;
+import org.apache.solr.cats.env.PortBlocks;
+import org.apache.solr.cats.exec.CatsFiles;
+import org.apache.solr.cats.exec.CommandResult;
+import org.apache.solr.cats.exec.ProcessKill;
 import org.apache.solr.cli.SolrProcessManager.SolrProcess;
 import org.apache.solr.shell.env.HarnessEnv;
-import org.apache.solr.shell.env.PortBlocks;
 import org.apache.solr.shell.env.Ports;
-import org.apache.solr.shell.exec.CommandResult;
-import org.apache.solr.shell.exec.ProcessKill;
 import org.apache.solr.shell.exec.SolrNodes;
 import org.apache.solr.shell.session.CliSession;
 import org.apache.solr.shell.session.HttpsRequest;
@@ -482,7 +484,7 @@ public abstract class SolrShellTestCase extends SolrTestCase {
   private static void cleanSolrHome() throws IOException {
     Path solrHome = harnessEnv.solrHome();
     if (Files.isDirectory(solrHome)) {
-      IOUtils.rm(solrHome);
+      CatsFiles.rm(solrHome);
     }
     Files.createDirectories(solrHome);
     Files.createDirectories(harnessEnv.logsDir());
@@ -575,7 +577,7 @@ public abstract class SolrShellTestCase extends SolrTestCase {
                 description.getTestClass().getSimpleName() + "-" + description.getMethodName());
     try {
       if (Files.exists(target)) {
-        IOUtils.rm(target);
+        CatsFiles.rm(target);
       }
       Files.createDirectories(target);
       copyRecursively(harnessEnv.solrHome(), target.resolve("solr-home"));

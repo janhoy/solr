@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.exec;
+package org.apache.solr.cats.exec;
 
 /**
  * A shell test failure, reported as the commands that ran rather than as a Java stack trace.

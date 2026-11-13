@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.exec;
+package org.apache.solr.cats.exec;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,7 +35,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import org.apache.lucene.util.SuppressForbidden;
+import org.apache.solr.cats.SuppressForbidden;
 
 /**
  * Runs one command line in a fresh shell process and collects the result.

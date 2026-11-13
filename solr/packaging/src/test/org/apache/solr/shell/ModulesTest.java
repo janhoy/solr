@@ -20,7 +20,7 @@ package org.apache.solr.shell;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import org.apache.solr.shell.exec.Shell;
+import org.apache.solr.cats.exec.Shell;
 import org.junit.Test;
 
 /**

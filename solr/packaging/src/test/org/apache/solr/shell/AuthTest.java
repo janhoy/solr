@@ -20,7 +20,7 @@ package org.apache.solr.shell;
 import java.io.IOException;
 import java.nio.file.Files;
 import org.apache.lucene.util.IOUtils;
-import org.apache.solr.shell.exec.Shell;
+import org.apache.solr.cats.exec.Shell;
 import org.junit.Before;
 import org.junit.Test;
 

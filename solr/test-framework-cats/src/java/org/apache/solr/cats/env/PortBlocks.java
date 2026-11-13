@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.env;
+package org.apache.solr.cats.env;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -83,8 +83,10 @@ public final class PortBlocks {
    * <p>The run's base port is recorded in the counter file by whichever JVM gets there first, so
    * every fork agrees on it without the Gradle task having to pass it in. {@code seedBase}, when
    * positive, is that first writer's starting point; otherwise it is random.
+   *
+   * @return the first port of the claimed block
    */
-  public static Ports claim(Path outputDir, int seedBase) {
+  public static int claim(Path outputDir, int seedBase) {
     Path counter = outputDir.resolve(COUNTER_FILE);
     try {
       Files.createDirectories(outputDir);
@@ -131,7 +133,7 @@ public final class PortBlocks {
     }
   }
 
-  private static Ports claimLocked(FileChannel channel, Path counter, int seedBase)
+  private static int claimLocked(FileChannel channel, Path counter, int seedBase)
       throws IOException {
     Properties state = read(channel);
 
@@ -154,9 +156,7 @@ public final class PortBlocks {
     state.setProperty(NEXT_KEY, Integer.toString(index + 1));
     write(channel, state);
 
-    // Mirrors Solr: node ports are consecutive from the base, embedded ZooKeeper sits 1000 above
-    // the first of them.
-    return Ports.fromBase(base + index * STRIDE);
+    return base + index * STRIDE;
   }
 
   private static Properties read(FileChannel channel) throws IOException {
@@ -176,6 +176,7 @@ public final class PortBlocks {
   }
 
   private static void write(FileChannel channel, Properties state) throws IOException {
+    // TODO G3.1: name the harness, not Solr, once the layout comes from the program under test
     String text =
         String.format(
             Locale.ROOT,

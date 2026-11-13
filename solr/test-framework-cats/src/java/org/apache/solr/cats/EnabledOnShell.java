@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell;
+package org.apache.solr.cats;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import org.apache.solr.shell.exec.Shell;
+import org.apache.solr.cats.exec.Shell;
 
 /**
- * Restricts a {@link SolrShellTestCase} test, or a whole class of them, to particular shells. On
+ * Restricts a {@code SolrShellTestCase} test, or a whole class of them, to particular shells. On
  * any other shell it is skipped as an assumption failure.
  *
  * <p>Use it where {@code bin/solr} and {@code bin/solr.cmd} genuinely differ — an option only one
