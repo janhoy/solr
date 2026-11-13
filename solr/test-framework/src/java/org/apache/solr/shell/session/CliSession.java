@@ -17,17 +17,9 @@
 
 package org.apache.solr.shell.session;
 
-import com.sun.net.httpserver.HttpServer;
-import com.sun.net.httpserver.SimpleFileServer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.invoke.MethodHandles;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,7 +43,6 @@ import java.util.function.BooleanSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
-import org.apache.solr.cats.SuppressForbidden;
 import org.apache.solr.cats.Traits;
 import org.apache.solr.cats.env.CatsHarnessEnv;
 import org.apache.solr.cats.env.PortBlock;
@@ -67,6 +58,7 @@ import org.apache.solr.cats.exec.ShellExecutor;
 import org.apache.solr.cats.exec.Shells;
 import org.apache.solr.cats.exec.Variables;
 import org.apache.solr.cats.session.CatsCliHelpers;
+import org.apache.solr.cats.session.CatsNet;
 import org.apache.solr.cats.session.Transcript;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,9 +81,6 @@ public class CliSession implements AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
-  /** Timeout for {@link #download}, which fetches from the network rather than from a node. */
-  private static final Duration DOWNLOAD_TIMEOUT = Duration.ofMinutes(10);
-
   private static final AtomicInteger SEQ = new AtomicInteger();
 
   private final CatsHarnessEnv harnessEnv;
@@ -102,12 +91,12 @@ public class CliSession implements AutoCloseable {
   private final Path workDir;
   private final Transcript transcript;
   private final CatsCliHelpers helpers;
+  private final CatsNet net;
   private final Map<String, String> vars;
   private final Shell shell;
 
   private final List<Process> startedProcesses = new ArrayList<>();
   private final Map<Integer, Long> ownedNodes = new LinkedHashMap<>();
-  private final Map<Integer, HttpServer> fileServers = new LinkedHashMap<>();
 
   private Path cwd;
   private Duration timeout;
@@ -136,6 +125,7 @@ public class CliSession implements AutoCloseable {
     this.timeout = harnessEnv.timeout();
     this.transcript = new Transcript(workDir.resolve("transcript.log"));
     this.helpers = new CatsCliHelpers(harnessEnv, shell, transcript, varsForAssertions());
+    this.net = new CatsNet(transcript, this::path);
     // Exposed as a variable so a test can name its own scratch space inside a command line or an
     // assertion — ${WORK_DIR}/something — instead of formatting a Java path into the string.
     this.vars.put("WORK_DIR", workDir.toString());
@@ -396,89 +386,20 @@ public class CliSession implements AutoCloseable {
 
   // ------------------------------------------------------------ a local web server
 
-  /**
-   * Serves a directory over HTTP on a free port, and returns the port.
-   *
-   * <p>For a test whose subject is Solr reading a URL — {@code solr post --mode web}, a remote
-   * config set, a module fetching a resource — without depending on the network or on a real site's
-   * current content. The port is an ephemeral one the OS picks rather than one from this class's
-   * block: nothing needs to predict it, and it does not spend one of the four ports a class owns.
-   *
-   * <p>Every server a scope starts is stopped when the scope ends. {@link #serveHttpShutdown(int)}
-   * stops one early, for a test that wants to observe a fetch failing.
-   *
-   * @param webRoot the directory to serve, resolved against {@link #cwd()}
-   * @return the port it is listening on
-   */
-  @SuppressForbidden(reason = "com.sun.net.httpserver is where the JDK's own web server lives")
+  /** Serves a directory over HTTP on a free port, and returns the port. */
   public int serveHttp(String webRoot) {
     requireOpen();
-    Path root = path(webRoot);
-    if (!Files.isDirectory(root)) {
-      throw new AssertionError("serveHttp: not a directory: " + root);
-    }
-    // The JDK's own file server, JEP 408. Nothing to get wrong here: it maps the path, picks the
-    // content type, serves index.html for a directory and refuses anything outside the root.
-    // Bound to loopback — a fixture has no business being reachable from off the machine — and to
-    // port 0, meaning whatever is free.
-    HttpServer server =
-        SimpleFileServer.createFileServer(
-            new InetSocketAddress(InetAddress.getLoopbackAddress(), 0),
-            root.toAbsolutePath(),
-            SimpleFileServer.OutputLevel.NONE);
-    server.start();
-    int port = server.getAddress().getPort();
-    fileServers.put(port, server);
-    transcript.note("serving " + root + " at http://localhost:" + port);
-    return port;
+    return net.serveHttp(webRoot);
   }
 
   /** Stops one server started by {@link #serveHttp}. Stopping one twice is not an error. */
-  @SuppressForbidden(reason = "com.sun.net.httpserver is where the JDK's own web server lives")
   public void serveHttpShutdown(int port) {
-    HttpServer server = fileServers.remove(port);
-    if (server != null) {
-      server.stop(0);
-    }
+    net.serveHttpShutdown(port);
   }
 
-  /**
-   * Port of {@code curl -o <path> <url>}: fetches a URL into a file, creating parent directories.
-   *
-   * <p>In Java because neither curl nor wget is on a stock Windows runner. A non-2xx response, or a
-   * transport failure, fails the test rather than leaving a truncated file behind.
-   *
-   * @return the absolute path of the downloaded file
-   */
+  /** Fetches a URL into a file, and returns the absolute path of that file. */
   public Path download(String url, String path) {
-    Path file = path(path);
-    try (HttpClient client =
-        HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build()) {
-      Files.createDirectories(file.getParent());
-      HttpRequest request =
-          HttpRequest.newBuilder(URI.create(url)).timeout(DOWNLOAD_TIMEOUT).GET().build();
-      HttpResponse<Path> response =
-          client.send(
-              request,
-              HttpResponse.BodyHandlers.ofFile(
-                  file,
-                  StandardOpenOption.CREATE,
-                  StandardOpenOption.WRITE,
-                  StandardOpenOption.TRUNCATE_EXISTING));
-      if (response.statusCode() / 100 != 2) {
-        throw new AssertionError(
-            "Downloading " + url + " answered HTTP " + response.statusCode() + ", not 2xx");
-      }
-      return file;
-    } catch (IOException e) {
-      throw new UncheckedIOException("Could not download " + url + " to " + file, e);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new IllegalStateException("Interrupted downloading " + url, e);
-    }
+    return net.download(url, path);
   }
 
   public Path cwd() {
@@ -1092,7 +1013,7 @@ public class CliSession implements AutoCloseable {
 
     // Fixture web servers first: they hold only a loopback socket, and a test that failed
     // mid-fetch should not leave one listening.
-    for (Integer port : List.copyOf(fileServers.keySet())) {
+    for (Integer port : net.servingPorts()) {
       try {
         serveHttpShutdown(port);
       } catch (RuntimeException e) {
