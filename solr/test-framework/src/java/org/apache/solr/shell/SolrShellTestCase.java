@@ -38,10 +38,10 @@ import org.apache.solr.cats.env.PortBlocks;
 import org.apache.solr.cats.exec.CatsFiles;
 import org.apache.solr.cats.exec.CommandResult;
 import org.apache.solr.cats.exec.ProcessKill;
-import org.apache.solr.cli.SolrProcessManager.SolrProcess;
+import org.apache.solr.cats.exec.RunningProgram;
 import org.apache.solr.shell.env.HarnessEnv;
 import org.apache.solr.shell.env.Ports;
-import org.apache.solr.shell.exec.SolrNodes;
+import org.apache.solr.shell.exec.SolrProgram;
 import org.apache.solr.shell.session.CliSession;
 import org.apache.solr.shell.session.HttpsRequest;
 import org.apache.solr.shell.session.SolrCliHelpers;
@@ -82,6 +82,9 @@ public abstract class SolrShellTestCase extends SolrTestCase {
   /** How long the post-flight check waits for the port block to come free. */
   private static final Duration LEAK_CHECK_TIMEOUT = Duration.ofSeconds(10);
 
+  /** The program every session here drives: how a node is found, stopped and cleaned up after. */
+  private static final SolrProgram PROGRAM = new SolrProgram();
+
   /** The resolved environment: distribution, {@code SOLR_HOME}, ports, base environment. */
   protected static HarnessEnv harnessEnv;
 
@@ -104,12 +107,11 @@ public abstract class SolrShellTestCase extends SolrTestCase {
     // concurrently in separate forks.
     harnessEnv = HarnessEnv.forClass(getTestClass().getSimpleName());
     requireCli(getTestClass().getAnnotation(EnabledOnCli.class));
-    CliSession.resetKnownNodes();
     // Order-independent: node discovery goes through the running process list, not through files
     // that the SOLR_HOME wipe could destroy.
     preFlightLeakCheck();
     cleanSolrHome();
-    classCli = CliSession.forScope(harnessEnv, getTestClass().getSimpleName());
+    classCli = CliSession.forScope(harnessEnv, PROGRAM, getTestClass().getSimpleName());
     if (log.isInfoEnabled()) {
       log.info(
           "Shell harness ready: SOLR_TIP={} SOLR_HOME={} ports={}",
@@ -502,7 +504,7 @@ public abstract class SolrShellTestCase extends SolrTestCase {
     // from an earlier run of the same task — the span is fixed when the run claims its first
     // block, from a base that is random per run. So this is safe against a sibling class in this
     // run, and against another suite or checkout, whose marker prefix differs.
-    for (SolrProcess node : SolrNodes.running(harnessEnv.taskMarkerPrefix())) {
+    for (RunningProgram node : PROGRAM.running(harnessEnv.taskMarkerPrefix())) {
       boolean ours = PortBlocks.belongsToThisRun(harnessEnv.testOutputDir(), node.port());
       if (!ours || harnessEnv.ports().contains(node.port())) {
         log.warn(
@@ -531,7 +533,7 @@ public abstract class SolrShellTestCase extends SolrTestCase {
 
     // Only a running node is a leak. A pid file left behind by a node that is already gone is
     // litter, and not this check's business — the process list is what matters.
-    for (SolrProcess node : SolrNodes.running(harnessEnv.marker())) {
+    for (RunningProgram node : PROGRAM.running(harnessEnv.marker())) {
       if (harnessEnv.ports().contains(node.port())) {
         leaks.add("Solr still running on port " + node.port() + " (pid " + node.pid() + ")");
         ProcessKill.killTree(node.pid(), Duration.ofSeconds(10));

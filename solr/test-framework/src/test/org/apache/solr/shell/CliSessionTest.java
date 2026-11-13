@@ -25,9 +25,12 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.apache.solr.SolrTestCase;
 import org.apache.solr.cats.EnabledOnShell;
 import org.apache.solr.cats.ShellGate;
+import org.apache.solr.cats.exec.ProgramUnderTest;
+import org.apache.solr.cats.exec.RunningProgram;
 import org.apache.solr.cats.exec.Shell;
 import org.apache.solr.shell.env.HarnessEnv;
 import org.apache.solr.shell.session.CliSession;
@@ -56,13 +59,28 @@ public class CliSessionTest extends SolrTestCase {
   private HarnessEnv env;
   private CliSession session;
 
+  /**
+   * A program with nothing overridden but discovery, which the ownership cases script. Everything
+   * else here needs no program at all, which is the point of every method having a default.
+   */
+  private final ScriptedProgram program = new ScriptedProgram();
+
+  private static final class ScriptedProgram implements ProgramUnderTest {
+    private List<RunningProgram> running = List.of();
+
+    @Override
+    public List<RunningProgram> running(String marker) {
+      return running;
+    }
+  }
+
   @Before
   public void openSession() throws IOException {
     // HarnessEnv only asks that SOLR_TIP contain a bin directory; nothing here runs bin/solr.
     Path fakeTip = createTempDir("tip");
     Files.createDirectories(fakeTip.resolve("bin"));
     env = HarnessEnv.of(fakeTip, createTempDir("out"));
-    session = CliSession.forScope(env, getTestName());
+    session = CliSession.forScope(env, program, getTestName());
   }
 
   @After
@@ -369,6 +387,52 @@ public class CliSessionTest extends SolrTestCase {
     // command's bytes are UTF-8, so decoding replaces rather than throws.
     session.script("printf 'before\\xffafter\\n'", null).assertExitCode(0).assertContains("before");
     session.lastResult().assertContains("after");
+  }
+
+  // ------------------------------------------------------- node ownership
+  // Pids no process could have, so cleanup finds nothing alive and kills nothing.
+
+  @Test
+  public void aNodeIsOwnedByTheSessionThatStartedIt() {
+    int port = env.ports().solr2();
+    CliSession child = session.child("starter");
+    try {
+      program.running = List.of(new RunningProgram(90_000_001L, port));
+      child.run("echo started");
+      assertEquals(Set.of(port), child.ownedPorts());
+      assertEquals(Set.of(), session.ownedPorts());
+    } finally {
+      child.close();
+    }
+  }
+
+  @Test
+  public void aRestartedNodeStaysOwnedByTheAncestorSession() {
+    // Otherwise a test that restarts the node its class started would take ownership of it, and
+    // stop it when that one test ended — tearing down the node every later test still expects.
+    int port = env.ports().solr();
+    program.running = List.of(new RunningProgram(90_000_002L, port));
+    session.run("echo started");
+    assertEquals(Set.of(port), session.ownedPorts());
+
+    CliSession child = session.child("restarter");
+    try {
+      program.running = List.of(new RunningProgram(90_000_003L, port));
+      child.run("echo restarted");
+      assertEquals(Set.of(port), session.ownedPorts());
+      assertEquals(Set.of(), child.ownedPorts());
+    } finally {
+      child.close();
+    }
+  }
+
+  @Test
+  public void aNodeOutsideThisClassesPortBlockIsNobodysBusiness() {
+    // The record of running nodes is shared with every other class on the cmd side, so the block
+    // is what tells this class's nodes from a sibling's.
+    program.running = List.of(new RunningProgram(90_000_004L, env.ports().solr() + 500));
+    session.run("echo elsewhere");
+    assertEquals(Set.of(), session.ownedPorts());
   }
 
   // ---------------------------------------------------------------- cmd.exe specifics

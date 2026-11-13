@@ -30,9 +30,10 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Supplier;
 import org.apache.solr.cats.env.PortBlocks;
+import org.apache.solr.cats.exec.ProgramRegistry;
 import org.apache.solr.cli.SolrProcessManager;
 import org.apache.solr.shell.Cli;
-import org.apache.solr.shell.exec.SolrNodes;
+import org.apache.solr.shell.exec.SolrProgram;
 
 /**
  * The environment a shell test run operates in: where the Solr distribution lives, which {@code
@@ -57,6 +58,7 @@ public final class HarnessEnv {
   private final Map<String, String> vars;
   private final Map<String, String> baseEnv;
   private final Ports ports;
+  private final ProgramRegistry registry = new ProgramRegistry();
 
   private HarnessEnv(Map<String, String> vars, Ports ports) {
     this.vars = Collections.unmodifiableMap(vars);
@@ -193,7 +195,7 @@ public final class HarnessEnv {
    * another checkout, or a developer's own Solr.
    */
   public static String taskMarkerPrefix(Path outputDir) {
-    return SolrNodes.MARKER_PREFIX
+    return SolrProgram.MARKER_PREFIX
         + Integer.toHexString(outputDir.toAbsolutePath().normalize().toString().hashCode())
         + "-";
   }
@@ -301,6 +303,11 @@ public final class HarnessEnv {
 
   public Ports ports() {
     return ports;
+  }
+
+  /** Where the instances a session starts are tracked, and from where a leak is finally killed. */
+  public ProgramRegistry registry() {
+    return registry;
   }
 
   public Path solrTip() {

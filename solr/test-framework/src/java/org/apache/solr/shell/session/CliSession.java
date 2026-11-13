@@ -42,9 +42,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -55,15 +55,16 @@ import org.apache.solr.cats.SuppressForbidden;
 import org.apache.solr.cats.exec.CatsFiles;
 import org.apache.solr.cats.exec.CommandResult;
 import org.apache.solr.cats.exec.ProcessKill;
+import org.apache.solr.cats.exec.ProgramRegistry;
+import org.apache.solr.cats.exec.ProgramUnderTest;
+import org.apache.solr.cats.exec.RunningProgram;
 import org.apache.solr.cats.exec.Shell;
 import org.apache.solr.cats.exec.ShellAssertionError;
 import org.apache.solr.cats.exec.ShellExecutor;
 import org.apache.solr.cats.exec.Variables;
 import org.apache.solr.cats.session.Transcript;
-import org.apache.solr.cli.SolrProcessManager.SolrProcess;
 import org.apache.solr.shell.env.HarnessEnv;
 import org.apache.solr.shell.env.Ports;
-import org.apache.solr.shell.exec.SolrNodes;
 import org.junit.AssumptionViolatedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,20 +96,11 @@ public class CliSession implements AutoCloseable {
   /** Timeout for {@link #download}, which fetches from the network rather than from a node. */
   private static final Duration DOWNLOAD_TIMEOUT = Duration.ofMinutes(10);
 
-  /** Every PID the harness has ever seen, so the shutdown hook can finish the job. */
-  private static final Set<Long> ALL_RECORDED_PIDS = ConcurrentHashMap.newKeySet();
-
-  /** Nodes already accounted for, so one is owned by the scope that actually started it. */
-  private static final Map<Integer, Long> KNOWN_NODES = new ConcurrentHashMap<>();
-
   private static final AtomicInteger SEQ = new AtomicInteger();
 
-  static {
-    Runtime.getRuntime()
-        .addShutdownHook(new Thread(CliSession::killAllRecordedPids, "solr-shell-harness-cleanup"));
-  }
-
   private final HarnessEnv harnessEnv;
+  private final ProgramUnderTest program;
+  private final ProgramRegistry registry;
   private final CliSession parent;
   private final String name;
   private final Path workDir;
@@ -130,6 +122,7 @@ public class CliSession implements AutoCloseable {
 
   private CliSession(
       HarnessEnv harnessEnv,
+      ProgramUnderTest program,
       CliSession parent,
       String name,
       Path workDir,
@@ -137,6 +130,8 @@ public class CliSession implements AutoCloseable {
       Path cwd,
       Shell shell) {
     this.harnessEnv = harnessEnv;
+    this.program = program;
+    this.registry = harnessEnv.registry();
     this.parent = parent;
     this.name = name;
     this.workDir = workDir;
@@ -153,14 +148,14 @@ public class CliSession implements AutoCloseable {
    * Creates the class-scoped session: BATS' {@code setup_file} scope. Its work dir is {@code
    * $TEST_OUTPUT_DIR/work/<name>}.
    */
-  public static CliSession forScope(HarnessEnv env, String name) {
+  public static CliSession forScope(HarnessEnv env, ProgramUnderTest program, String name) {
     Path workDir = env.testOutputDir().resolve("work").resolve(sanitize(name));
     createDir(workDir);
     Map<String, String> vars = newEnvMap();
     vars.putAll(env.baseEnv());
     // Starts in its own work directory, so a relative path in a command means something per
     // scope and a test needs no cd() to create or name a scratch file.
-    return new CliSession(env, null, name, workDir, vars, workDir, Shell.defaultShell());
+    return new CliSession(env, program, null, name, workDir, vars, workDir, Shell.defaultShell());
   }
 
   /**
@@ -175,7 +170,8 @@ public class CliSession implements AutoCloseable {
     // The child gets its own work directory as its cwd, unless the parent had cd'd elsewhere.
     Path childCwd = cwd.equals(workDir) ? childWorkDir : cwd;
     CliSession child =
-        new CliSession(harnessEnv, this, childName, childWorkDir, childVars, childCwd, shell);
+        new CliSession(
+            harnessEnv, program, this, childName, childWorkDir, childVars, childCwd, shell);
     child.timeout = timeout;
     child.startTimeout = startTimeout;
     child.shellSpecific = shellSpecific;
@@ -928,6 +924,7 @@ public class CliSession implements AutoCloseable {
   }
 
   private Duration timeoutFor(String line) {
+    // TODO G4.2: one timeout, so nothing has to classify a command line.
     String trimmed = line.trim();
     return trimmed.startsWith("solr start") || trimmed.startsWith("solr restart")
         ? startTimeout
@@ -998,16 +995,13 @@ public class CliSession implements AutoCloseable {
   // owner != this compares session identity on purpose, so equals() would be wrong here.
   @SuppressWarnings("ReferenceEquality")
   private void claimNewNodes() {
-    for (SolrProcess node : SolrNodes.running(harnessEnv.marker())) {
+    for (RunningProgram node : program.running(harnessEnv.marker())) {
       if (!harnessEnv.ports().contains(node.port())) {
         continue;
       }
-      Long known = KNOWN_NODES.get(node.port());
-      if (known != null && known == node.pid()) {
+      if (!registry.recordIfNew(node)) {
         continue;
       }
-      KNOWN_NODES.put(node.port(), node.pid());
-      ALL_RECORDED_PIDS.add(node.pid());
 
       // A node on a port an ancestor already owns stays the ancestor's, with its pid brought up to
       // date. Otherwise a test that restarts the node its class started in @BeforeClass would take
@@ -1120,10 +1114,14 @@ public class CliSession implements AutoCloseable {
     // Graceful stop first, so Solr gets to shut down cleanly and remove its own pid file.
     for (Map.Entry<Integer, Long> node : ownedNodes.entrySet()) {
       int port = node.getKey();
+      Optional<String> stop = program.stopCommand(port);
+      if (stop.isEmpty()) {
+        continue;
+      }
       try {
-        CommandResult result = runForCleanup("solr stop -p " + port);
+        CommandResult result = runForCleanup(stop.get());
         if (result != null && result.failed()) {
-          log.warn("'solr stop -p {}' exited {}", port, result.status());
+          log.warn("'{}' exited {}", stop.get(), result.status());
         }
       } catch (RuntimeException | AssertionError e) {
         problems.add("stopping Solr on port " + port + ": " + e);
@@ -1139,17 +1137,12 @@ public class CliSession implements AutoCloseable {
           problems.add("could not kill Solr pid " + pid + " on port " + node.getKey());
         }
       }
-      ALL_RECORDED_PIDS.remove(pid);
-      KNOWN_NODES.remove(node.getKey(), pid);
-      // Both spellings: bin/solr writes solr-<port>.pid, bin\solr.cmd writes solr-<port>.port, and
-      // SolrProcessManager reads either. Only a graceful stop removes its own file, so a stale one
-      // left by a force-kill is what 'solr stop --all' and 'solr status' would later walk.
-      for (String suffix : List.of(".pid", ".port")) {
-        Path pidFile = harnessEnv.pidDir().resolve("solr-" + node.getKey() + suffix);
+      registry.forget(node.getKey(), pid);
+      for (Path stale : program.staleStateFiles(harnessEnv.pidDir(), node.getKey())) {
         try {
-          Files.deleteIfExists(pidFile);
+          Files.deleteIfExists(stale);
         } catch (IOException e) {
-          problems.add("could not delete " + pidFile + ": " + e);
+          problems.add("could not delete " + stale + ": " + e);
         }
       }
     }
@@ -1192,20 +1185,6 @@ public class CliSession implements AutoCloseable {
     } catch (IOException e) {
       log.warn("Could not clean temp scripts in {}", workDir, e);
     }
-  }
-
-  /** Last resort, from the JVM shutdown hook: kill every Solr the harness ever started. */
-  private static void killAllRecordedPids() {
-    for (Long pid : ALL_RECORDED_PIDS) {
-      if (ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) {
-        ProcessKill.killTree(pid, Duration.ofSeconds(5));
-      }
-    }
-  }
-
-  /** Forgets the nodes seen so far, so a fresh class starts with a clean slate. */
-  public static void resetKnownNodes() {
-    KNOWN_NODES.clear();
   }
 
   private static Map<String, String> newEnvMap() {
