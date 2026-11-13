@@ -18,6 +18,7 @@
 package org.apache.solr.cats.exec;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -65,10 +66,15 @@ public final class Variables {
    *
    * @param vars the environment to resolve against
    * @param context what is being resolved, for the failure message
+   * @param echoedPrefixes which names the failure message lists; empty means all of them
    * @throws AssertionError if a name is not defined — a typo should be findable, not silent
    */
   public static String resolve(
-      String text, Pattern pattern, Map<String, String> vars, String context) {
+      String text,
+      Pattern pattern,
+      Map<String, String> vars,
+      String context,
+      Set<String> echoedPrefixes) {
     Matcher m = pattern.matcher(text);
     StringBuilder resolved = new StringBuilder();
     while (m.find()) {
@@ -86,7 +92,7 @@ public final class Variables {
                 + ": "
                 + text
                 + "\nDefined: "
-                + definedNames(vars));
+                + definedNames(vars, echoedPrefixes));
       }
       m.appendReplacement(resolved, Matcher.quoteReplacement(value));
     }
@@ -94,11 +100,14 @@ public final class Variables {
     return resolved.toString();
   }
 
-  /** The harness' own variables, which is what a typo is almost always a near-miss of. */
-  private static String definedNames(Map<String, String> vars) {
+  /**
+   * The program's own variables, which is what a typo is almost always a near-miss of. Which
+   * prefixes those are is the environment's to say; the whole inherited environment would tell a
+   * reader nothing.
+   */
+  private static String definedNames(Map<String, String> vars, Set<String> echoedPrefixes) {
     return vars.keySet().stream()
-        // TODO G3.2: take the prefixes from CatsHarnessEnv.echoedPrefixes()
-        .filter(k -> k.startsWith("SOLR") || k.startsWith("ZK_") || k.startsWith("TEST_"))
+        .filter(k -> echoedPrefixes.isEmpty() || echoedPrefixes.stream().anyMatch(k::startsWith))
         .sorted()
         .toList()
         .toString();

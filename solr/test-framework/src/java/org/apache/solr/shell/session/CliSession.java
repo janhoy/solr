@@ -52,6 +52,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.apache.solr.cats.SuppressForbidden;
+import org.apache.solr.cats.env.CatsHarnessEnv;
 import org.apache.solr.cats.env.PortBlock;
 import org.apache.solr.cats.exec.CatsFiles;
 import org.apache.solr.cats.exec.CommandResult;
@@ -64,7 +65,6 @@ import org.apache.solr.cats.exec.ShellAssertionError;
 import org.apache.solr.cats.exec.ShellExecutor;
 import org.apache.solr.cats.exec.Variables;
 import org.apache.solr.cats.session.Transcript;
-import org.apache.solr.shell.env.HarnessEnv;
 import org.junit.AssumptionViolatedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,7 +98,7 @@ public class CliSession implements AutoCloseable {
 
   private static final AtomicInteger SEQ = new AtomicInteger();
 
-  private final HarnessEnv harnessEnv;
+  private final CatsHarnessEnv harnessEnv;
   private final ProgramUnderTest program;
   private final ProgramRegistry registry;
   private final CliSession parent;
@@ -121,7 +121,7 @@ public class CliSession implements AutoCloseable {
   private boolean shellSpecific;
 
   private CliSession(
-      HarnessEnv harnessEnv,
+      CatsHarnessEnv harnessEnv,
       ProgramUnderTest program,
       CliSession parent,
       String name,
@@ -146,10 +146,10 @@ public class CliSession implements AutoCloseable {
 
   /**
    * Creates the class-scoped session: BATS' {@code setup_file} scope. Its work dir is {@code
-   * $TEST_OUTPUT_DIR/work/<name>}.
+   * <output dir>/work/<name>}.
    */
-  public static CliSession forScope(HarnessEnv env, ProgramUnderTest program, String name) {
-    Path workDir = env.testOutputDir().resolve("work").resolve(sanitize(name));
+  public static CliSession forScope(CatsHarnessEnv env, ProgramUnderTest program, String name) {
+    Path workDir = env.outputDir().resolve("work").resolve(sanitize(name));
     createDir(workDir);
     Map<String, String> vars = newEnvMap();
     vars.putAll(env.baseEnv());
@@ -313,13 +313,16 @@ public class CliSession implements AutoCloseable {
     // Resolved, like fileContains' argument: the two are siblings and must not differ in whether
     // a ${NAME} in the pattern means anything.
     Pattern pattern =
-        Pattern.compile(Variables.resolve(regex, Variables.ANY, vars, "a file assertion"));
+        Pattern.compile(
+            Variables.resolve(regex, Variables.ANY, vars, "a file assertion", echoedPrefixes()));
     return read(path).lines().filter(line -> pattern.matcher(line).find()).toList();
   }
 
   /** Port of {@code grep -q <text> <path>}. */
   public boolean fileContains(String path, String text) {
-    return read(path).contains(Variables.resolve(text, Variables.ANY, vars, "a file assertion"));
+    return read(path)
+        .contains(
+            Variables.resolve(text, Variables.ANY, vars, "a file assertion", echoedPrefixes()));
   }
 
   /** Port of {@code [ -e <path> ]}. */
@@ -499,8 +502,13 @@ public class CliSession implements AutoCloseable {
     return harnessEnv.ports();
   }
 
-  public HarnessEnv harnessEnv() {
+  public CatsHarnessEnv harnessEnv() {
     return harnessEnv;
+  }
+
+  /** The variable-name prefixes an unresolved {@code ${NAME}} lists as defined. */
+  public Set<String> echoedPrefixes() {
+    return harnessEnv.echoedPrefixes();
   }
 
   public Transcript transcript() {
@@ -700,7 +708,9 @@ public class CliSession implements AutoCloseable {
       }
     }
     return execute(
-        Variables.resolve(chosen, Variables.BRACES_ONLY, vars, "a script"), timeout, false);
+        Variables.resolve(chosen, Variables.BRACES_ONLY, vars, "a script", echoedPrefixes()),
+        timeout,
+        false);
   }
 
   private void requireOpen() {
@@ -910,7 +920,8 @@ public class CliSession implements AutoCloseable {
   /** Resolves every variable spelling a cross-shell line may use, then rejects the cmd.exe one. */
   private String resolveForRun(String line) {
     requireOpen();
-    String resolved = Variables.resolve(line, Variables.ANY, vars, "a command line");
+    String resolved =
+        Variables.resolve(line, Variables.ANY, vars, "a command line", echoedPrefixes());
     Matcher cmdForm = Variables.CMD_FORM.matcher(resolved);
     if (cmdForm.find()) {
       throw new AssertionError(
@@ -945,6 +956,7 @@ public class CliSession implements AutoCloseable {
             shell,
             cwd,
             vars,
+            echoedPrefixes(),
             workDir,
             "cmd-" + SEQ.incrementAndGet(),
             commandTimeout,
@@ -1140,7 +1152,7 @@ public class CliSession implements AutoCloseable {
         }
       }
       registry.forget(node.getKey(), pid);
-      for (Path stale : program.staleStateFiles(harnessEnv.pidDir(), node.getKey())) {
+      for (Path stale : program.staleStateFiles(harnessEnv.stateDir(), node.getKey())) {
         try {
           Files.deleteIfExists(stale);
         } catch (IOException e) {

@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,6 +40,7 @@ import java.util.regex.Pattern;
  * @param vars an unmodifiable view of the session environment this ran with. Assertions resolve
  *     {@code ${NAME}} in their expected text against it, so an assertion reads exactly like the
  *     BATS one it was ported from.
+ * @param echoedPrefixes which of those names an unresolved {@code ${NAME}} lists as defined
  * @param history everything the scope has run, which a failure quotes instead of a stack trace
  */
 public record CommandResult(
@@ -52,11 +54,12 @@ public record CommandResult(
     Duration duration,
     boolean timedOut,
     Map<String, String> vars,
+    Set<String> echoedPrefixes,
     CommandHistory history) {
 
   /** Resolves {@code ${NAME}} and friends in an assertion's expected text. */
   private String resolve(String expected) {
-    return Variables.resolve(expected, Variables.ANY, vars, "an assertion");
+    return Variables.resolve(expected, Variables.ANY, vars, "an assertion", echoedPrefixes);
   }
 
   /** How much of the output an assertion message shows. */

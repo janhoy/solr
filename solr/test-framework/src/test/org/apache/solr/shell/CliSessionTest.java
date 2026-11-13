@@ -32,7 +32,7 @@ import org.apache.solr.cats.ShellGate;
 import org.apache.solr.cats.exec.ProgramUnderTest;
 import org.apache.solr.cats.exec.RunningProgram;
 import org.apache.solr.cats.exec.Shell;
-import org.apache.solr.shell.env.HarnessEnv;
+import org.apache.solr.shell.env.SolrCatsHarnessEnv;
 import org.apache.solr.shell.session.CliSession;
 import org.apache.solr.shell.session.SolrCliHelpers;
 import org.junit.After;
@@ -56,7 +56,7 @@ public class CliSessionTest extends SolrTestCase {
   /** Makes {@link EnabledOnShell} effective without needing a Solr distribution. */
   @Rule public final ShellGate shellGate = new ShellGate();
 
-  private HarnessEnv env;
+  private SolrCatsHarnessEnv env;
   private CliSession session;
 
   /**
@@ -76,10 +76,11 @@ public class CliSessionTest extends SolrTestCase {
 
   @Before
   public void openSession() throws IOException {
-    // HarnessEnv only asks that SOLR_TIP contain a bin directory; nothing here runs bin/solr.
+    // SolrCatsHarnessEnv only asks that SOLR_TIP contain a bin directory; nothing here runs
+    // bin/solr.
     Path fakeTip = createTempDir("tip");
     Files.createDirectories(fakeTip.resolve("bin"));
-    env = HarnessEnv.of(fakeTip, createTempDir("out"));
+    env = SolrCatsHarnessEnv.of(fakeTip, createTempDir("out"));
     session = CliSession.forScope(env, program, getTestName());
   }
 
@@ -616,7 +617,8 @@ public class CliSessionTest extends SolrTestCase {
             "<html><script src=\"libs/solr/index.js\"></script></html>",
             HttpHeaders.of(
                 Map.of("Content-Type", List.of("text/html;charset=utf-8")), (name, value) -> true),
-            Map.of("SOLR_PORT", "1234"));
+            Map.of("SOLR_PORT", "1234"),
+            env.echoedPrefixes());
     // ${NAME} resolves in an HTTP assertion exactly as it does in a command assertion; before
     // this, the expected text was compared unresolved and a ported BATS line passed silently.
     result.assertContains("libs/solr/index.js").assertNotContains("port ${SOLR_PORT}");

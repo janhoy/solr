@@ -31,6 +31,7 @@ import java.security.KeyStore;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
+import java.util.Set;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
 import org.apache.solr.cats.exec.Shell;
@@ -58,14 +59,21 @@ public final class HttpsRequest {
   private String authorization;
   private String curlAuth;
   private final Map<String, String> vars;
+  private final Set<String> echoedPrefixes;
   private final Transcript transcript;
   private final Shell shell;
 
   HttpsRequest(
-      int port, String pathAndQuery, Map<String, String> vars, Transcript transcript, Shell shell) {
+      int port,
+      String pathAndQuery,
+      Map<String, String> vars,
+      Set<String> echoedPrefixes,
+      Transcript transcript,
+      Shell shell) {
     this.port = port;
     this.pathAndQuery = pathAndQuery;
     this.vars = vars;
+    this.echoedPrefixes = echoedPrefixes;
     this.transcript = transcript;
     this.shell = shell;
   }
@@ -123,10 +131,11 @@ public final class HttpsRequest {
       HttpResponse<String> response =
           client.send(request.build(), HttpResponse.BodyHandlers.ofString());
       transcript.recordHttp(curl(url), response.statusCode(), response.body());
-      return new HttpResult(response.statusCode(), response.body(), response.headers(), vars);
+      return new HttpResult(
+          response.statusCode(), response.body(), response.headers(), vars, echoedPrefixes);
     } catch (IOException e) {
       transcript.recordHttp(curl(url), -1, describe(e));
-      return new HttpResult(-1, describe(e), vars);
+      return new HttpResult(-1, describe(e), vars, echoedPrefixes);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IllegalStateException("Interrupted requesting " + url, e);

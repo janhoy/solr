@@ -33,6 +33,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import org.apache.solr.cats.SuppressForbidden;
@@ -57,6 +58,8 @@ public final class ShellExecutor {
    * @param line the command line, handed to the shell as-is
    * @param workDir where temp scripts and the captured output files are written
    * @param tag a name unique within {@code workDir}, used for those files
+   * @param echoedPrefixes which of {@code env}'s names the result lists as defined when an
+   *     assertion names one that is not
    * @param separateStreams keep stdout and stderr apart instead of merging them like BATS' {@code
    *     run} does
    */
@@ -65,6 +68,7 @@ public final class ShellExecutor {
       Shell shell,
       Path cwd,
       Map<String, String> env,
+      Set<String> echoedPrefixes,
       Path workDir,
       String tag,
       Duration timeout,
@@ -125,6 +129,7 @@ public final class ShellExecutor {
           timedOut,
           // A view, not a copy: assertions resolve against it immediately after the command.
           Collections.unmodifiableMap(spec.env()),
+          spec.echoedPrefixes(),
           spec.history());
     } catch (IOException e) {
       throw new UncheckedIOException("Could not run: " + spec.line(), e);

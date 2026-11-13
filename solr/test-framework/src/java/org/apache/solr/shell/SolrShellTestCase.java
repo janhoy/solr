@@ -34,12 +34,13 @@ import java.util.stream.Stream;
 import org.apache.solr.SolrTestCase;
 import org.apache.solr.cats.EnabledOnShell;
 import org.apache.solr.cats.ShellGate;
+import org.apache.solr.cats.env.CatsHarnessEnv;
 import org.apache.solr.cats.env.PortBlocks;
 import org.apache.solr.cats.exec.CatsFiles;
 import org.apache.solr.cats.exec.CommandResult;
 import org.apache.solr.cats.exec.ProcessKill;
 import org.apache.solr.cats.exec.RunningProgram;
-import org.apache.solr.shell.env.HarnessEnv;
+import org.apache.solr.shell.env.SolrCatsHarnessEnv;
 import org.apache.solr.shell.env.SolrPorts;
 import org.apache.solr.shell.exec.SolrProgram;
 import org.apache.solr.shell.session.CliSession;
@@ -86,7 +87,7 @@ public abstract class SolrShellTestCase extends SolrTestCase {
   private static final SolrProgram PROGRAM = new SolrProgram();
 
   /** The resolved environment: distribution, {@code SOLR_HOME}, ports, base environment. */
-  protected static HarnessEnv harnessEnv;
+  protected static SolrCatsHarnessEnv harnessEnv;
 
   /** The class-scoped session. Solr started here lives for the whole class. */
   protected static CliSession classCli;
@@ -105,7 +106,7 @@ public abstract class SolrShellTestCase extends SolrTestCase {
     requireShell(getTestClass().getAnnotation(EnabledOnShell.class));
     // Per class, not per JVM: directories and ports keyed to this class are what let classes run
     // concurrently in separate forks.
-    harnessEnv = HarnessEnv.forClass(getTestClass().getSimpleName());
+    harnessEnv = SolrCatsHarnessEnv.forClass(getTestClass().getSimpleName());
     requireCli(getTestClass().getAnnotation(EnabledOnCli.class));
     // Order-independent: node discovery goes through the running process list, not through files
     // that the SOLR_HOME wipe could destroy.
@@ -519,7 +520,7 @@ public abstract class SolrShellTestCase extends SolrTestCase {
 
     List<Integer> busy = new ArrayList<>();
     for (int port : harnessEnv.ports().all()) {
-      if (!HarnessEnv.isFree(port)) {
+      if (!CatsHarnessEnv.isFree(port)) {
         busy.add(port);
       }
     }
@@ -547,7 +548,7 @@ public abstract class SolrShellTestCase extends SolrTestCase {
     do {
       busy = new ArrayList<>();
       for (int port : harnessEnv.ports().all()) {
-        if (!HarnessEnv.isFree(port)) {
+        if (!CatsHarnessEnv.isFree(port)) {
           busy.add(port);
         }
       }

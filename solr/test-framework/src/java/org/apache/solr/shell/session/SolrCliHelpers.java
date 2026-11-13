@@ -35,6 +35,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
@@ -75,11 +76,17 @@ public final class SolrCliHelpers {
    * <p>{@code curl} appears seventy times across the BATS suites, almost always followed by an
    * assertion on the body, so this is what those lines port to.
    */
-  public record HttpResult(int status, String body, HttpHeaders headers, Map<String, String> vars) {
+  public record HttpResult(
+      int status,
+      String body,
+      HttpHeaders headers,
+      Map<String, String> vars,
+      Set<String> echoedPrefixes) {
 
     /** A result with no response headers, for a request that never completed. */
-    public HttpResult(int status, String body, Map<String, String> vars) {
-      this(status, body, HttpHeaders.of(Map.of(), (name, value) -> true), vars);
+    public HttpResult(
+        int status, String body, Map<String, String> vars, Set<String> echoedPrefixes) {
+      this(status, body, HttpHeaders.of(Map.of(), (name, value) -> true), vars, echoedPrefixes);
     }
 
     /**
@@ -88,7 +95,7 @@ public final class SolrCliHelpers {
      * never pass by comparing against the unresolved text.
      */
     private String resolve(String expected) {
-      return Variables.resolve(expected, Variables.ANY, vars, "an HTTP assertion");
+      return Variables.resolve(expected, Variables.ANY, vars, "an HTTP assertion", echoedPrefixes);
     }
 
     public HttpResult assertStatus(int expected) {
@@ -367,10 +374,14 @@ public final class SolrCliHelpers {
       String decoded = decodeBody(response);
       cli.transcript().recordHttp(curl, response.statusCode(), decoded);
       return new HttpResult(
-          response.statusCode(), decoded, response.headers(), cli.varsForAssertions());
+          response.statusCode(),
+          decoded,
+          response.headers(),
+          cli.varsForAssertions(),
+          cli.echoedPrefixes());
     } catch (IOException e) {
       cli.transcript().recordHttp(curl, -1, e.toString());
-      return new HttpResult(-1, e.toString(), cli.varsForAssertions());
+      return new HttpResult(-1, e.toString(), cli.varsForAssertions(), cli.echoedPrefixes());
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IllegalStateException("Interrupted requesting " + url, e);
@@ -444,7 +455,12 @@ public final class SolrCliHelpers {
   /** As {@link #https(String)} but against an explicit port. */
   public HttpsRequest https(int port, String pathAndQuery) {
     return new HttpsRequest(
-        port, pathAndQuery, cli.varsForAssertions(), cli.transcript(), cli.shell());
+        port,
+        pathAndQuery,
+        cli.varsForAssertions(),
+        cli.echoedPrefixes(),
+        cli.transcript(),
+        cli.shell());
   }
 
   /** Whether the named collection is in ZooKeeper. Port of {@code collection_exists}. */
@@ -502,7 +518,7 @@ public final class SolrCliHelpers {
 
   /** Prints the tail of {@code solr.log} to stderr, for debugging a failing test. */
   public void dumpSolrLog() {
-    Path logFile = cli.harnessEnv().logsDir().resolve("solr.log");
+    Path logFile = cli.harnessEnv().logDir().resolve("solr.log");
     if (!Files.isRegularFile(logFile)) {
       System.err.println("No solr.log at " + logFile);
       return;
