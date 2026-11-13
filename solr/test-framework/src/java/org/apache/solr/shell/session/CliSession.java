@@ -79,7 +79,7 @@ import org.slf4j.LoggerFactory;
  * setup_file}; each test gets a {@linkplain #child child} of it whose environment and cwd changes
  * are discarded afterwards.
  *
- * <p>Sessions track which Solr nodes they started by scanning the running process list after each
+ * <p>Sessions track which nodes they started by scanning the running process list after each
  * command, filtered to this scope's marker and port block, and stop exactly those on {@link
  * #close()}.
  */
@@ -90,7 +90,7 @@ public class CliSession implements AutoCloseable {
   /** Default per-command timeout. */
   public static final Duration DEFAULT_TIMEOUT = Duration.ofMinutes(2);
 
-  /** Timeout for lines that start or restart a Solr node, which is much slower. */
+  /** Timeout for lines that start or restart a node, which is much slower. */
   public static final Duration DEFAULT_START_TIMEOUT = Duration.ofMinutes(5);
 
   /** Timeout for {@link #download}, which fetches from the network rather than from a node. */
@@ -762,9 +762,12 @@ public class CliSession implements AutoCloseable {
           Map.entry("wget", "http(pathAndQuery)"),
           Map.entry("jq", "assert on http(..).body(), or parse it in Java"),
           Map.entry("sleep", "awaitOrFail(what, timeout, interval, condition)"),
-          Map.entry("ps", "the harness tracks what a test started; see solr status"),
-          Map.entry("kill", "the harness stops what a test started; see solr stop"),
-          Map.entry("pkill", "the harness stops what a test started; see solr stop"),
+          Map.entry(
+              "ps", "the harness tracks what a test started; use the test case's status helpers"),
+          Map.entry(
+              "kill", "the harness stops what a test started; use the test case's stop helpers"),
+          Map.entry(
+              "pkill", "the harness stops what a test started; use the test case's stop helpers"),
           Map.entry("pgrep", "the harness tracks what a test started"),
           Map.entry("lsof", "the harness owns its port block; no process lookup needed"),
           Map.entry("chmod", "no cmd.exe equivalent — mark the test @EnabledOnShell(Shell.BASH)"),
@@ -1012,7 +1015,7 @@ public class CliSession implements AutoCloseable {
         owner.ownedNodes.put(node.port(), node.pid());
         if (log.isInfoEnabled()) {
           log.info(
-              "Solr node on port {} restarted as pid {}; it stays owned by session '{}'",
+              "Node on port {} restarted as pid {}; it stays owned by session '{}'",
               node.port(),
               node.pid(),
               owner.name);
@@ -1022,8 +1025,7 @@ public class CliSession implements AutoCloseable {
 
       ownedNodes.put(node.port(), node.pid());
       if (log.isInfoEnabled()) {
-        log.info(
-            "Session '{}' now owns Solr node on port {} (pid {})", name, node.port(), node.pid());
+        log.info("Session '{}' now owns node on port {} (pid {})", name, node.port(), node.pid());
       }
     }
   }
@@ -1043,7 +1045,7 @@ public class CliSession implements AutoCloseable {
     return null;
   }
 
-  /** The ports of the Solr nodes this session started, in the order they appeared. */
+  /** The ports of the nodes this session started, in the order they appeared. */
   public Set<Integer> ownedPorts() {
     return new LinkedHashSet<>(ownedNodes.keySet());
   }

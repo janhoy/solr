@@ -40,7 +40,7 @@ public final class ProgramRegistry {
 
   public ProgramRegistry() {
     Runtime.getRuntime()
-        .addShutdownHook(new Thread(this::killRecordedPids, "solr-shell-harness-cleanup"));
+        .addShutdownHook(new Thread(this::killRecordedPids, "cats-cleanup"));
   }
 
   /**
