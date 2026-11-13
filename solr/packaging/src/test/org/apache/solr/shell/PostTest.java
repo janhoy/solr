@@ -19,7 +19,6 @@ package org.apache.solr.shell;
 
 import java.util.List;
 import org.apache.solr.cats.EnabledOnShell;
-import org.apache.solr.cats.exec.Shell;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -232,7 +231,7 @@ public class PostTest extends SolrShellTestCase {
   }
 
   @Test
-  @EnabledOnShell(Shell.BASH) // An argument containing a newline is not expressible on cmd.exe.
+  @EnabledOnShell("bash") // An argument containing a newline is not expressible on cmd.exe.
   public void argsModeWithACsvBodyContainingANewline() {
     // In the argv form the newline is
     // simply part of the Java string and the harness quotes it for the shell.

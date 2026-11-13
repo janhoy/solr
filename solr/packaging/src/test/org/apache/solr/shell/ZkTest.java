@@ -23,7 +23,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import org.apache.lucene.util.IOUtils;
 import org.apache.solr.cats.EnabledOnShell;
-import org.apache.solr.cats.exec.Shell;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -129,8 +128,7 @@ public class ZkTest extends SolrShellTestCase {
   }
 
   @Test
-  @EnabledOnShell(
-      Shell.BASH) // Creating a symlink on Windows needs privileges a test cannot assume.
+  @EnabledOnShell("bash") // Creating a symlink on Windows needs privileges a test cannot assume.
   public void solr12429UpconfigFailsWithSymlink() throws IOException {
     // A copy, rather than symlinking inside the distribution's own config set and deleting the
     // links

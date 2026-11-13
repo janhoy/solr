@@ -21,7 +21,6 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import org.apache.solr.cats.exec.Shell;
 
 /**
  * Restricts a {@code SolrShellTestCase} test, or a whole class of them, to particular shells. On
@@ -34,19 +33,19 @@ import org.apache.solr.cats.exec.Shell;
  *
  * <pre>
  *   &#64;Test
- *   &#64;EnabledOnShell(Shell.CMD)
+ *   &#64;EnabledOnShell("cmd")
  *   public void solrInCmdIsSourced() { ... }
  * </pre>
  *
  * <p>On a class it skips the whole class before any Solr is started, so a {@code @BeforeClass} that
  * starts a node costs nothing on the wrong shell.
  *
- * @see Shell
+ * @see org.apache.solr.cats.exec.Shells
  */
 @Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface EnabledOnShell {
 
-  /** The shells this test is meant for. */
-  Shell[] value();
+  /** The {@linkplain org.apache.solr.cats.exec.Shell#id() ids} of the shells this test is for. */
+  String[] value();
 }

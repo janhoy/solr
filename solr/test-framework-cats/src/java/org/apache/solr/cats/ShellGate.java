@@ -21,6 +21,7 @@ import static org.junit.Assume.assumeTrue;
 
 import java.util.List;
 import org.apache.solr.cats.exec.Shell;
+import org.apache.solr.cats.exec.Shells;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
@@ -53,8 +54,10 @@ public final class ShellGate implements TestRule {
     if (restriction == null) {
       return;
     }
-    Shell current = Shell.defaultShell();
-    List<Shell> allowed = List.of(restriction.value());
-    assumeTrue("Only runs on " + allowed + "; this run uses " + current, allowed.contains(current));
+    Shell current = Shells.current();
+    List<String> allowed = List.of(restriction.value());
+    assumeTrue(
+        "Only runs on " + allowed + "; this run uses " + current.id(),
+        allowed.contains(current.id()));
   }
 }

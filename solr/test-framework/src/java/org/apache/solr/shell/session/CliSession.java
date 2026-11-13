@@ -64,6 +64,7 @@ import org.apache.solr.cats.exec.RunningProgram;
 import org.apache.solr.cats.exec.Shell;
 import org.apache.solr.cats.exec.ShellAssertionError;
 import org.apache.solr.cats.exec.ShellExecutor;
+import org.apache.solr.cats.exec.Shells;
 import org.apache.solr.cats.exec.Variables;
 import org.apache.solr.cats.session.CatsCliHelpers;
 import org.apache.solr.cats.session.Transcript;
@@ -152,7 +153,7 @@ public class CliSession implements AutoCloseable {
     vars.putAll(env.baseEnv());
     // Starts in its own work directory, so a relative path in a command means something per
     // scope and a test needs no cd() to create or name a scratch file.
-    return new CliSession(env, program, null, name, workDir, vars, workDir, Shell.defaultShell());
+    return new CliSession(env, program, null, name, workDir, vars, workDir, Shells.current());
   }
 
   /**
@@ -685,11 +686,11 @@ public class CliSession implements AutoCloseable {
    */
   public CommandResult script(String bashScript, String cmdScript) {
     requireOpen();
-    String chosen = shell == Shell.BASH ? bashScript : cmdScript;
+    String chosen = "bash".equals(shell.id()) ? bashScript : cmdScript;
     if (chosen == null) {
       throw new AssumptionViolatedException("No " + shell + " script supplied for this test");
     }
-    if (shell == Shell.CMD) {
+    if ("cmd".equals(shell.id())) {
       // cmd.exe has no $NAME syntax at all, so one in a cmd body is dead text that will reach the
       // command verbatim. Worth catching, because the bash body of the same script() call expands
       // it from the environment and therefore appears to work — exactly how the stdin test in the
@@ -721,7 +722,7 @@ public class CliSession implements AutoCloseable {
 
   /**
    * A run is one command. A newline in the line would change what cmd.exe does without saying so:
-   * Shell.CMD drops the {@code call} for a multi-line body, and without {@code call} a batch file
+   * Shells.CMD drops the {@code call} for a multi-line body, and without {@code call} a batch file
    * that invokes {@code solr.cmd} never gets control back. Easy to write by accident in a text
    * block.
    *
@@ -780,12 +781,12 @@ public class CliSession implements AutoCloseable {
               "pkill", "the harness stops what a test started; use the test case's stop helpers"),
           Map.entry("pgrep", "the harness tracks what a test started"),
           Map.entry("lsof", "the harness owns its port block; no process lookup needed"),
-          Map.entry("chmod", "no cmd.exe equivalent — mark the test @EnabledOnShell(Shell.BASH)"),
-          Map.entry("chown", "no cmd.exe equivalent — mark the test @EnabledOnShell(Shell.BASH)"),
-          Map.entry("ln", "Files.createSymbolicLink, and @EnabledOnShell(Shell.BASH)"),
-          Map.entry("openssl", "no cmd.exe equivalent — mark the test @EnabledOnShell(Shell.BASH)"),
-          Map.entry("tar", "unpack it in Java, or mark the test @EnabledOnShell(Shell.BASH)"),
-          Map.entry("unzip", "unpack it in Java, or mark the test @EnabledOnShell(Shell.BASH)"),
+          Map.entry("chmod", "no cmd.exe equivalent — mark the test @EnabledOnShell(\"bash\")"),
+          Map.entry("chown", "no cmd.exe equivalent — mark the test @EnabledOnShell(\"bash\")"),
+          Map.entry("ln", "Files.createSymbolicLink, and @EnabledOnShell(\"bash\")"),
+          Map.entry("openssl", "no cmd.exe equivalent — mark the test @EnabledOnShell(\"bash\")"),
+          Map.entry("tar", "unpack it in Java, or mark the test @EnabledOnShell(\"bash\")"),
+          Map.entry("unzip", "unpack it in Java, or mark the test @EnabledOnShell(\"bash\")"),
           Map.entry("xargs", "loop in Java"),
           Map.entry("tee", "the harness already captures the output"),
           Map.entry("which", "no cmd.exe equivalent"),

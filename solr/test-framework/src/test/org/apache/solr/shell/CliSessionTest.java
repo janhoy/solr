@@ -31,7 +31,7 @@ import org.apache.solr.cats.EnabledOnShell;
 import org.apache.solr.cats.ShellGate;
 import org.apache.solr.cats.exec.ProgramUnderTest;
 import org.apache.solr.cats.exec.RunningProgram;
-import org.apache.solr.cats.exec.Shell;
+import org.apache.solr.cats.exec.Shells;
 import org.apache.solr.cats.session.CatsCliHelpers;
 import org.apache.solr.shell.env.SolrCatsHarnessEnv;
 import org.apache.solr.shell.session.CliSession;
@@ -47,7 +47,7 @@ import org.junit.Test;
  *
  * <p>Deliberately uses only shell built-ins, so it needs no unpacked distribution and runs in a
  * couple of seconds. It runs on whichever shell the platform uses, which is how the {@code
- * Shell.CMD} half of the harness gets covered at all; the handful of cases that really are one
+ * Shells.CMD} half of the harness gets covered at all; the handful of cases that really are one
  * shell's carry {@link EnabledOnShell}. The suites that actually drive {@code bin/solr} live in
  * {@code solr/packaging} and extend {@link SolrShellTestCase}.
  */
@@ -163,8 +163,7 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
-  @EnabledOnShell(
-      Shell.BASH) // Single quotes are bash's; cmd.exe treats them as ordinary characters.
+  @EnabledOnShell("bash") // Single quotes are bash's; cmd.exe treats them as ordinary characters.
   public void aHarnessResolvedVariableIsNotLeftForTheShell() {
     // The proof that it is the harness and not bash doing the work: the resolved value reaches the
     // command even inside single quotes, where bash would never have expanded anything.
@@ -229,7 +228,7 @@ public class CliSessionTest extends SolrTestCase {
 
   @Test
   public void scriptSkipsWhenTheCurrentShellHasNoBody() {
-    boolean bash = session.shell() == Shell.BASH;
+    boolean bash = "bash".equals(session.shell().id());
     expectThrows(
         AssumptionViolatedException.class,
         () -> {
@@ -243,7 +242,7 @@ public class CliSessionTest extends SolrTestCase {
 
   @Test
   public void aScriptBodyMayOpenWithTheShellsOwnSyntax() {
-    // cmd.exe cannot 'call' its own batch syntax, so Shell.CMD has to hand such a line over as-is.
+    // cmd.exe cannot 'call' its own batch syntax, so Shells.CMD has to hand such a line over as-is.
     session
         .script("for i in 1 2; do echo n$i; done", "for /l %%i in (1,1,2) do @echo n%%i")
         .assertLineCount(2)
@@ -252,7 +251,7 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
-  @EnabledOnShell(Shell.BASH) // About bash's brace expansion specifically.
+  @EnabledOnShell("bash") // About bash's brace expansion specifically.
   public void bashLeavesDoubleBracesAlone() {
     // Guards the choice of delimiter. 'not-a-var' is not a legal placeholder name, so the harness
     // passes it through untouched and bash gets to see it — unquoted, with brace expansion live.
@@ -290,10 +289,9 @@ public class CliSessionTest extends SolrTestCase {
     assertEquals("", separated.stderr());
   }
 
+  // cmd.exe's echo prints the quotes that quoting adds, so the expected output differs.
   @Test
-  @EnabledOnShell(
-      Shell.BASH) // cmd.exe's echo prints the quotes that quoting adds, so the expected output
-  // differs.
+  @EnabledOnShell("bash")
   public void argvFormQuotesArgumentsForTheShell() {
     session.run(List.of("echo", "a b", "c&d", "e|f", "g'h")).assertExact("a b c&d e|f g'h");
   }
@@ -381,7 +379,7 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
-  @EnabledOnShell(Shell.BASH) // printf is the portable way to emit a specific invalid byte.
+  @EnabledOnShell("bash") // printf is the portable way to emit a specific invalid byte.
   public void outputThatIsNotValidUtf8DoesNotFailTheCommand() {
     // Found on Windows, where bin/solr.cmd output comes back in the console code page: strict
     // decoding turned a passing command into a MalformedInputException. Nothing guarantees a
@@ -439,7 +437,7 @@ public class CliSessionTest extends SolrTestCase {
   // ---------------------------------------------------------------- cmd.exe specifics
 
   @Test
-  @EnabledOnShell(Shell.CMD)
+  @EnabledOnShell("cmd")
   public void cmdQuotingProtectsMetacharacters() {
     // Characters cmd's parser would otherwise act on, passed as argv so the harness quotes each.
     // Checked with contains rather than equals because cmd's echo prints the quotes that quoting
@@ -452,7 +450,7 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
-  @EnabledOnShell(Shell.CMD)
+  @EnabledOnShell("cmd")
   public void cmdQuotingRefusesACaret() {
     // 'call' re-parses its line, which doubles a caret: "a^b" arrives as "a^^b". Refused rather
     // than silently mangled, the same treatment an embedded double quote gets.
@@ -463,15 +461,15 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
-  @EnabledOnShell(Shell.CMD)
+  @EnabledOnShell("cmd")
   public void cmdQuotingEscapesPercentForBatchFiles() {
     // % is expanded even inside double quotes, and a literal one in a batch file is written %%.
     // A URL carrying an escape like %20 is the case that matters.
-    assertEquals("a%%20b", Shell.CMD.quote("a%20b"));
+    assertEquals("a%%20b", Shells.CMD.quote("a%20b"));
   }
 
   @Test
-  @EnabledOnShell(Shell.CMD)
+  @EnabledOnShell("cmd")
   public void cmdQuotingRefusesAnEmbeddedDoubleQuote() {
     // Refused rather than mangled: cmd has no escape that survives both its own quote counting
     // and the target program's parser.
@@ -482,7 +480,7 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
-  @EnabledOnShell(Shell.CMD)
+  @EnabledOnShell("cmd")
   public void cmdScriptsMayBeMultiLine() {
     // 'call' takes one command, so a multi-line body is written verbatim instead. This is what
     // script(bash, cmd) exists for.
@@ -493,7 +491,7 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
-  @EnabledOnShell(Shell.CMD)
+  @EnabledOnShell("cmd")
   public void aCmdScriptRejectsADollarVariable() {
     // cmd.exe does not expand $NAME, so it would reach the command as text. Caught because the
     // bash body of the same script() call does expand it, which makes the mistake look fine until
@@ -505,7 +503,7 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
-  @EnabledOnShell(Shell.CMD)
+  @EnabledOnShell("cmd")
   public void cmdEnvironmentIsCaseInsensitive() {
     // Windows environment names are case-insensitive, so the harness keeps its env map that way.
     session.env("MiXeD_Case_Var", "value");
