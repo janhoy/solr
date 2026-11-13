@@ -17,22 +17,46 @@
 
 package org.apache.solr.shell.env;
 
-/**
- * The block of ports a shell test run owns, mirroring the {@code SOLR_PORT}, {@code SOLR2_PORT},
- * {@code SOLR3_PORT} and {@code ZK_PORT} variables used by the BATS suites.
- */
-public record Ports(int solr, int solr2, int solr3, int zk) {
+import org.apache.solr.cats.env.PortBlock;
 
-  /**
-   * Derives the conventional block from a base port: {@code P}, {@code P+1}, {@code P+2}, {@code
-   * P+1000}.
-   */
-  public static Ports fromBase(int base) {
-    return new Ports(base, base + 1, base + 2, base + 1000);
+/**
+ * Solr's names for the block of ports a shell test run owns, mirroring the {@code SOLR_PORT},
+ * {@code SOLR2_PORT}, {@code SOLR3_PORT} and {@code ZK_PORT} variables used by the BATS suites.
+ *
+ * <p>A view over the block the harness claimed, in the order {@link
+ * org.apache.solr.shell.exec.SolrProgram#LAYOUT} lists.
+ */
+public record SolrPorts(PortBlock block) implements PortBlock {
+
+  public int solr() {
+    return block.at(0);
   }
 
+  public int solr2() {
+    return block.at(1);
+  }
+
+  public int solr3() {
+    return block.at(2);
+  }
+
+  public int zk() {
+    return block.at(3);
+  }
+
+  @Override
+  public int base() {
+    return block.base();
+  }
+
+  @Override
+  public int at(int index) {
+    return block.at(index);
+  }
+
+  @Override
   public int[] all() {
-    return new int[] {solr, solr2, solr3, zk};
+    return block.all();
   }
 
   /**
@@ -42,7 +66,13 @@ public record Ports(int solr, int solr2, int solr3, int zk) {
    * shared: {@code bin/solr.cmd} keeps it in {@code %SOLR_TIP%\bin} for every class and every
    * concurrent suite alike.
    */
+  @Override
   public boolean contains(int port) {
-    return port == solr || port == solr2 || port == solr3 || port == zk;
+    return block.contains(port);
+  }
+
+  @Override
+  public String toString() {
+    return block.toString();
   }
 }

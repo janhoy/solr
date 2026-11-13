@@ -57,10 +57,10 @@ public final class HarnessEnv {
 
   private final Map<String, String> vars;
   private final Map<String, String> baseEnv;
-  private final Ports ports;
+  private final SolrPorts ports;
   private final ProgramRegistry registry = new ProgramRegistry();
 
-  private HarnessEnv(Map<String, String> vars, Ports ports) {
+  private HarnessEnv(Map<String, String> vars, SolrPorts ports) {
     this.vars = Collections.unmodifiableMap(vars);
     this.ports = ports;
     this.baseEnv = Collections.unmodifiableMap(buildBaseEnv(vars));
@@ -78,7 +78,7 @@ public final class HarnessEnv {
     Path tip = requireDistribution(solrTip.toAbsolutePath().normalize());
     Path out = createDir(outputDir.toAbsolutePath().normalize(), "outputDir");
     Path solrHome = createDir(out.resolve("solr-home"), "SOLR_HOME");
-    Ports ports = claimPorts(out);
+    SolrPorts ports = claimPorts(out);
     return new HarnessEnv(
         assemble(
             tip,
@@ -114,7 +114,7 @@ public final class HarnessEnv {
     Path out = dir("TEST_OUTPUT_DIR", () -> tempDir("solr-shell-tests"));
     Path classDir = createDir(out.resolve(className), "class output dir");
     Path solrHome = createDir(classDir.resolve("solr-home"), "SOLR_HOME");
-    Ports ports = claimPorts(out);
+    SolrPorts ports = claimPorts(out);
     return new HarnessEnv(
         assemble(
             tip,
@@ -137,7 +137,7 @@ public final class HarnessEnv {
       Path pidDir,
       Path logsDir,
       Path failureDir,
-      Ports ports,
+      SolrPorts ports,
       String picocli) {
     Map<String, String> vars = new LinkedHashMap<>();
     vars.put("SOLR_TIP", tip.toString());
@@ -179,7 +179,7 @@ public final class HarnessEnv {
    * random base per run — so two suites sharing a machine do not see each other's nodes. An
    * explicit {@code SOLR_PROCESS_SCAN_MARKER} wins, for a CI job that would rather name its own.
    */
-  private static String marker(Path outputDir, Ports ports) {
+  private static String marker(Path outputDir, SolrPorts ports) {
     String explicit = lookup("SOLR_PROCESS_SCAN_MARKER");
     return (explicit == null || explicit.isBlank())
         ? taskMarkerPrefix(outputDir) + ports.solr()
@@ -214,17 +214,26 @@ public final class HarnessEnv {
   }
 
   /**
-   * One block per caller, claimed through {@code outputDir} so concurrent forks cannot overlap.
-   * {@code SOLR_PORT} in the environment pins the block instead, for reproducing one class by hand.
+   * One block per caller, in the shape the program asked for, claimed through {@code outputDir} so
+   * concurrent forks cannot overlap.
    */
-  private static Ports claimPorts(Path outputDir) {
-    String explicit = lookup("SOLR_PORT");
-    if (explicit != null && !explicit.isBlank()) {
-      return Ports.fromBase(Integer.parseInt(explicit.trim()));
+  private static SolrPorts claimPorts(Path outputDir) {
+    return new SolrPorts(PortBlocks.claim(outputDir, portBaseSeed(), SolrProgram.LAYOUT));
+  }
+
+  /**
+   * Where this run's blocks start, from {@code CATS_PORT_BASE} or {@code -Dcats.port.base}, so that
+   * a failing run can be replayed on the same ports. Random when unset.
+   *
+   * <p>A run setting of the harness itself, so it carries a harness name rather than one of the
+   * program's.
+   */
+  private static int portBaseSeed() {
+    String seed = System.getenv("CATS_PORT_BASE");
+    if (seed == null || seed.isBlank()) {
+      seed = System.getProperty("cats.port.base");
     }
-    String seed = lookup("SOLR_PORT_BASE");
-    int seedBase = (seed == null || seed.isBlank()) ? -1 : Integer.parseInt(seed.trim());
-    return Ports.fromBase(PortBlocks.claim(outputDir, seedBase));
+    return (seed == null || seed.isBlank()) ? -1 : Integer.parseInt(seed.trim());
   }
 
   /** Whether the given local port can be bound right now. */
@@ -301,7 +310,7 @@ public final class HarnessEnv {
     return baseEnv;
   }
 
-  public Ports ports() {
+  public SolrPorts ports() {
     return ports;
   }
 

@@ -52,6 +52,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.apache.solr.cats.SuppressForbidden;
+import org.apache.solr.cats.env.PortBlock;
 import org.apache.solr.cats.exec.CatsFiles;
 import org.apache.solr.cats.exec.CommandResult;
 import org.apache.solr.cats.exec.ProcessKill;
@@ -64,7 +65,6 @@ import org.apache.solr.cats.exec.ShellExecutor;
 import org.apache.solr.cats.exec.Variables;
 import org.apache.solr.cats.session.Transcript;
 import org.apache.solr.shell.env.HarnessEnv;
-import org.apache.solr.shell.env.Ports;
 import org.junit.AssumptionViolatedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -495,7 +495,7 @@ public class CliSession implements AutoCloseable {
     return shell;
   }
 
-  public Ports ports() {
+  public PortBlock ports() {
     return harnessEnv.ports();
   }
 

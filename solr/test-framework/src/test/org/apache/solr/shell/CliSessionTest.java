@@ -637,7 +637,7 @@ public class CliSessionTest extends SolrTestCase {
     // block, so it exercises the request path without needing a node.
     session
         .helpers()
-        .http(session.ports().solr(), "/solr/films/select", Map.of("Accept-Encoding", "gzip"))
+        .http(session.ports().at(0), "/solr/films/select", Map.of("Accept-Encoding", "gzip"))
         .assertConnectionFailed();
   }
 
@@ -649,7 +649,7 @@ public class CliSessionTest extends SolrTestCase {
     session
         .helpers()
         .httpPostFile(
-            session.ports().solr(), "/solr/x/update/extract?literal.id=doc1", "myfile", document)
+            session.ports().at(0), "/solr/x/update/extract?literal.id=doc1", "myfile", document)
         .assertConnectionFailed();
   }
 
@@ -658,7 +658,7 @@ public class CliSessionTest extends SolrTestCase {
     // Nothing is listening on the block this session claimed, which is the shape of the BATS
     // 'run ! curl https://...' line: no status, and the reason readable in the body.
     SolrCliHelpers.HttpResult result =
-        session.helpers().https(session.ports().solr(), "/solr/admin/info/system").get();
+        session.helpers().https(session.ports().at(0), "/solr/admin/info/system").get();
     result.assertConnectionFailed();
     assertTrue(result.body(), result.body().contains("Connect"));
   }
@@ -668,7 +668,7 @@ public class CliSessionTest extends SolrTestCase {
     // The body-carrying ports of 'curl -X POST -d ...' and 'curl --data-binary @file -X PUT ...'.
     // Nothing is listening on the block this session claimed, so this exercises the request path
     // without needing a node.
-    int port = session.ports().solr();
+    int port = session.ports().at(0);
     session
         .helpers()
         .httpPost(port, "/solr/films/schema", "application/json", "{\"add-field\":{}}")
@@ -683,7 +683,7 @@ public class CliSessionTest extends SolrTestCase {
   @Test
   public void aDownloadThatCannotConnectFailsLoudlyRatherThanLeavingATruncatedFile() {
     // Port of 'curl -o <file> <url>'. Nothing is listening on this session's block.
-    String url = "http://localhost:" + session.ports().solr() + "/model.onnx";
+    String url = "http://localhost:" + session.ports().at(0) + "/model.onnx";
     expectThrows(UncheckedIOException.class, () -> session.download(url, "model.onnx"));
   }
 

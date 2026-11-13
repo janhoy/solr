@@ -201,7 +201,7 @@ public final class SolrCliHelpers {
    * readiness checks portable: there is no curl on a stock Windows runner.
    */
   public HttpResult http(String pathAndQuery) {
-    return http(cli.ports().solr(), pathAndQuery);
+    return http(cli.ports().at(0), pathAndQuery);
   }
 
   /** A GET against an explicit port on localhost. */
@@ -213,7 +213,7 @@ public final class SolrCliHelpers {
    * A GET carrying explicit request headers, which is what {@code curl -H "Name: value"} ports to.
    */
   public HttpResult http(String pathAndQuery, Map<String, String> requestHeaders) {
-    return get(cli.ports().solr(), pathAndQuery, requestHeaders);
+    return get(cli.ports().at(0), pathAndQuery, requestHeaders);
   }
 
   /** As {@link #http(String, Map)} but against an explicit port. */
@@ -226,7 +226,7 @@ public final class SolrCliHelpers {
    * as {@link HttpsRequest#basicAuth} is the TLS one.
    */
   public HttpResult http(String pathAndQuery, String user, String password) {
-    return http(cli.ports().solr(), pathAndQuery, user, password);
+    return http(cli.ports().at(0), pathAndQuery, user, password);
   }
 
   /** As {@link #http(String, String, String)} but against an explicit port. */
@@ -247,7 +247,7 @@ public final class SolrCliHelpers {
    * uses.
    */
   public HttpResult httpPost(String pathAndQuery, String contentType, String body) {
-    return httpPost(cli.ports().solr(), pathAndQuery, contentType, body);
+    return httpPost(cli.ports().at(0), pathAndQuery, contentType, body);
   }
 
   /** As {@link #httpPost(String, String, String)} but against an explicit port. */
@@ -269,7 +269,7 @@ public final class SolrCliHelpers {
    * than a request a node answers from memory.
    */
   public HttpResult httpPut(String pathAndQuery, String contentType, Path file) {
-    return httpPut(cli.ports().solr(), pathAndQuery, contentType, file);
+    return httpPut(cli.ports().at(0), pathAndQuery, contentType, file);
   }
 
   /** As {@link #httpPut(String, String, Path)} but against an explicit port. */
@@ -297,7 +297,7 @@ public final class SolrCliHelpers {
    * <p>Shares {@link #httpPut}'s longer timeout, for the same reason.
    */
   public HttpResult httpPostFile(String pathAndQuery, String fieldName, Path file) {
-    return httpPostFile(cli.ports().solr(), pathAndQuery, fieldName, file);
+    return httpPostFile(cli.ports().at(0), pathAndQuery, fieldName, file);
   }
 
   /** As {@link #httpPostFile(String, String, Path)} but against an explicit port. */
@@ -438,7 +438,7 @@ public final class SolrCliHelpers {
    * --resolve}'s host.
    */
   public HttpsRequest https(String pathAndQuery) {
-    return https(cli.ports().solr(), pathAndQuery);
+    return https(cli.ports().at(0), pathAndQuery);
   }
 
   /** As {@link #https(String)} but against an explicit port. */

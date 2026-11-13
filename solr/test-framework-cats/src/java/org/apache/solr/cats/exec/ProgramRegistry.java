@@ -39,8 +39,7 @@ public final class ProgramRegistry {
   private final Map<Integer, Long> known = new ConcurrentHashMap<>();
 
   public ProgramRegistry() {
-    Runtime.getRuntime()
-        .addShutdownHook(new Thread(this::killRecordedPids, "cats-cleanup"));
+    Runtime.getRuntime().addShutdownHook(new Thread(this::killRecordedPids, "cats-cleanup"));
   }
 
   /**

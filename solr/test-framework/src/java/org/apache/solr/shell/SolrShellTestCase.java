@@ -40,7 +40,7 @@ import org.apache.solr.cats.exec.CommandResult;
 import org.apache.solr.cats.exec.ProcessKill;
 import org.apache.solr.cats.exec.RunningProgram;
 import org.apache.solr.shell.env.HarnessEnv;
-import org.apache.solr.shell.env.Ports;
+import org.apache.solr.shell.env.SolrPorts;
 import org.apache.solr.shell.exec.SolrProgram;
 import org.apache.solr.shell.session.CliSession;
 import org.apache.solr.shell.session.HttpsRequest;
@@ -195,7 +195,7 @@ public abstract class SolrShellTestCase extends SolrTestCase {
           };
 
   /** The ports this run owns. */
-  protected Ports ports() {
+  protected SolrPorts ports() {
     return harnessEnv.ports();
   }
 
@@ -505,7 +505,9 @@ public abstract class SolrShellTestCase extends SolrTestCase {
     // block, from a base that is random per run. So this is safe against a sibling class in this
     // run, and against another suite or checkout, whose marker prefix differs.
     for (RunningProgram node : PROGRAM.running(harnessEnv.taskMarkerPrefix())) {
-      boolean ours = PortBlocks.belongsToThisRun(harnessEnv.testOutputDir(), node.port());
+      boolean ours =
+          PortBlocks.belongsToThisRun(
+              harnessEnv.testOutputDir(), node.port(), PROGRAM.portLayout());
       if (!ours || harnessEnv.ports().contains(node.port())) {
         log.warn(
             "Killing a Solr node left behind by an earlier run of this task: port {}, pid {}",
