@@ -56,6 +56,12 @@ import org.apache.solr.cats.exec.ProgramUnderTest;
 public abstract class CatsHarnessEnv {
 
   /**
+   * The default a command is given to finish in, when {@code CATS_TIMEOUT} / {@code -Dcats.timeout}
+   * does not say otherwise. That setting is a whole number of seconds.
+   */
+  public static final Duration DEFAULT_TIMEOUT = Duration.ofMinutes(5);
+
+  /**
    * The output-directory variable from before the harness owned the name, still accepted so a build
    * that sets it keeps working.
    */
@@ -261,10 +267,13 @@ public abstract class CatsHarnessEnv {
     return markerPrefix() + Integer.toHexString(outputDir.toString().hashCode()) + "-";
   }
 
-  /** The run-wide command timeout, when one was configured with {@code CATS_TIMEOUT}. */
-  // TODO G4.2: the one place a command timeout defaults from.
-  public Optional<Duration> timeout() {
-    return Optional.ofNullable(timeout);
+  /**
+   * The run-wide default timeout every command in every session starts from, overridable per
+   * session with {@code cli.timeout(Duration)} and per call with the {@code run(Duration, line)}
+   * overloads.
+   */
+  public Duration timeout() {
+    return timeout;
   }
 
   /** Whether the given local port can be bound right now. */
@@ -345,7 +354,9 @@ public abstract class CatsHarnessEnv {
 
   private static Duration resolveTimeout() {
     String configured = Lookup.CATS.get("CATS_TIMEOUT");
-    return configured == null ? null : Duration.ofSeconds(Long.parseLong(configured.trim()));
+    return configured == null
+        ? DEFAULT_TIMEOUT
+        : Duration.ofSeconds(Long.parseLong(configured.trim()));
   }
 
   /**

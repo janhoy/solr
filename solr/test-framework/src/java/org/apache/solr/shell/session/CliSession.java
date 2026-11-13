@@ -71,7 +71,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A shell session: the environment, working directory, shell and timeouts that every command in a
+ * A shell session: the environment, working directory, shell and timeout that every command in a
  * scope runs with, plus the state needed to clean up afterwards.
  *
  * <p>There is no long-lived shell process. Every {@link #run} starts a fresh one with this
@@ -87,12 +87,6 @@ import org.slf4j.LoggerFactory;
 public class CliSession implements AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
-
-  /** Default per-command timeout. */
-  public static final Duration DEFAULT_TIMEOUT = Duration.ofMinutes(2);
-
-  /** Timeout for lines that start or restart a node, which is much slower. */
-  public static final Duration DEFAULT_START_TIMEOUT = Duration.ofMinutes(5);
 
   /** Timeout for {@link #download}, which fetches from the network rather than from a node. */
   private static final Duration DOWNLOAD_TIMEOUT = Duration.ofMinutes(10);
@@ -115,8 +109,7 @@ public class CliSession implements AutoCloseable {
   private final Map<Integer, HttpServer> fileServers = new LinkedHashMap<>();
 
   private Path cwd;
-  private Duration timeout = DEFAULT_TIMEOUT;
-  private Duration startTimeout = DEFAULT_START_TIMEOUT;
+  private Duration timeout;
   private CommandResult lastResult;
   private boolean closed;
   private boolean shellSpecific;
@@ -139,6 +132,7 @@ public class CliSession implements AutoCloseable {
     this.vars = vars;
     this.cwd = cwd;
     this.shell = shell;
+    this.timeout = harnessEnv.timeout();
     this.transcript = new Transcript(workDir.resolve("transcript.log"));
     this.helpers = new CatsCliHelpers(harnessEnv, shell, transcript, varsForAssertions());
     // Exposed as a variable so a test can name its own scratch space inside a command line or an
@@ -175,7 +169,6 @@ public class CliSession implements AutoCloseable {
         new CliSession(
             harnessEnv, program, this, childName, childWorkDir, childVars, childCwd, shell);
     child.timeout = timeout;
-    child.startTimeout = startTimeout;
     child.shellSpecific = shellSpecific;
     return child;
   }
@@ -540,12 +533,6 @@ public class CliSession implements AutoCloseable {
     return this;
   }
 
-  /** Overrides the timeout used for {@code solr start} and {@code solr restart} lines. */
-  public CliSession startTimeout(Duration newStartTimeout) {
-    this.startTimeout = newStartTimeout;
-    return this;
-  }
-
   /** The result of the most recent command in this session. */
   public CommandResult lastResult() {
     return lastResult;
@@ -584,7 +571,7 @@ public class CliSession implements AutoCloseable {
       requirePortableLine(line);
     }
     String resolved = resolveForRun(line);
-    return requireExit(execute(resolved, timeoutFor(resolved), false), true);
+    return requireExit(execute(resolved, timeout, false), true);
   }
 
   /**
@@ -597,7 +584,7 @@ public class CliSession implements AutoCloseable {
       requirePortableLine(line);
     }
     String resolved = resolveForRun(line);
-    return requireExit(execute(resolved, timeoutFor(resolved), false), false);
+    return requireExit(execute(resolved, timeout, false), false);
   }
 
   /**
@@ -611,7 +598,7 @@ public class CliSession implements AutoCloseable {
       requirePortableLine(line);
     }
     String resolved = resolveForRun(line);
-    return execute(resolved, timeoutFor(resolved), false);
+    return execute(resolved, timeout, false);
   }
 
   /** The status check behind {@code run} and {@code runFail}; neither lets one pass silently. */
@@ -653,7 +640,7 @@ public class CliSession implements AutoCloseable {
       requirePortableTool(argv.isEmpty() ? "" : argv.get(0));
     }
     String line = shell.joinArgs(argv.stream().map(this::resolveForRun).toList());
-    return requireExit(execute(line, timeoutFor(line), false), true);
+    return requireExit(execute(line, timeout, false), true);
   }
 
   /** Like {@link #run(List)} but for a command that is expected to fail. */
@@ -662,7 +649,7 @@ public class CliSession implements AutoCloseable {
       requirePortableTool(argv.isEmpty() ? "" : argv.get(0));
     }
     String line = shell.joinArgs(argv.stream().map(this::resolveForRun).toList());
-    return requireExit(execute(line, timeoutFor(line), false), false);
+    return requireExit(execute(line, timeout, false), false);
   }
 
   /** Like {@link #run(String)} but keeps {@code stdout()} and {@code stderr()} apart. */
@@ -672,7 +659,7 @@ public class CliSession implements AutoCloseable {
       requirePortableLine(line);
     }
     String resolved = resolveForRun(line);
-    return requireExit(execute(resolved, timeoutFor(resolved), true), true);
+    return requireExit(execute(resolved, timeout, true), true);
   }
 
   /**
@@ -937,14 +924,6 @@ public class CliSession implements AutoCloseable {
               + "script(bash, cmd) if it really is shell-specific.");
     }
     return resolved;
-  }
-
-  private Duration timeoutFor(String line) {
-    // TODO G4.2: one timeout, so nothing has to classify a command line.
-    String trimmed = line.trim();
-    return trimmed.startsWith("solr start") || trimmed.startsWith("solr restart")
-        ? startTimeout
-        : timeout;
   }
 
   private CommandResult execute(String rawLine, Duration commandTimeout, boolean separateStreams) {
