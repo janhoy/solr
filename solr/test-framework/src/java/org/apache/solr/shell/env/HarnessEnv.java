@@ -334,8 +334,7 @@ public final class HarnessEnv {
   /**
    * Which command-line implementation {@code bin/solr} will dispatch to for this run.
    *
-   * <p>Defaulting lives in {@link Cli#of}, so this and {@code CommandResult.picocli()} cannot drift
-   * apart.
+   * <p>Defaulting lives in {@link Cli#of}, so every reader of it agrees.
    */
   public Cli cli() {
     return Cli.of(vars);

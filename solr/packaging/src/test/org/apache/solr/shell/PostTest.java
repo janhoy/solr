@@ -40,8 +40,8 @@ public class PostTest extends SolrShellTestCase {
   @Test
   public void checkHelpCommand() {
     runFail("solr post")
-        .assertContainsForCli(
-            "Missing required option: c", "Missing required option: '--name=name'");
+        .assertContains(
+            forCli("Missing required option: c", "Missing required option: '--name=name'"));
 
     run("solr post -h").assertContains("usage: bin/solr post").assertNotContains("ERROR");
     run("solr post --help").assertContains("usage: bin/solr post").assertNotContains("ERROR");

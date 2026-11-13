@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.apache.solr.shell.Cli;
 
 /**
  * The outcome of one shell command, with BATS-style fluent assertions.
@@ -54,11 +53,6 @@ public record CommandResult(
     boolean timedOut,
     Map<String, String> vars,
     CommandHistory history) {
-
-  /** Whether this run targets the picocli CLI, which SOLR-18561 made the default. */
-  public boolean picocli() {
-    return Cli.of(vars) == Cli.PICOCLI;
-  }
 
   /** Resolves {@code ${NAME}} and friends in an assertion's expected text. */
   private String resolve(String expected) {
@@ -235,15 +229,6 @@ public record CommandResult(
               + expected);
     }
     return this;
-  }
-
-  /**
-   * Port of {@code assert_output_for_cli}: asserts the commons-cli wording, or the picocli wording
-   * when the run targets the picocli CLI.
-   */
-  // TODO: Remove this once the commons-cli cleanup happens.
-  public CommandResult assertContainsForCli(String commonsCliText, String picocliText) {
-    return assertContains(picocli() ? picocliText : commonsCliText);
   }
 
   /**

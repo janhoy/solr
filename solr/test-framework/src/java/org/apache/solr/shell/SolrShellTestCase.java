@@ -200,6 +200,12 @@ public abstract class SolrShellTestCase extends SolrTestCase {
     return harnessEnv.cli();
   }
 
+  /** The wording for the command-line implementation this run targets. */
+  // TODO: Remove this once the commons-cli cleanup happens.
+  protected String forCli(String commonsCliText, String picocliText) {
+    return harnessEnv.cli() == Cli.PICOCLI ? picocliText : commonsCliText;
+  }
+
   /**
    * Skips the test, or the class, when {@link EnabledOnCli} does not name the implementation this
    * run targets.
