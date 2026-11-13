@@ -234,6 +234,11 @@ public abstract class CatsHarnessEnv {
     return ports;
   }
 
+  /** The shape of that block, including which of its ports is the primary one. */
+  public PortLayout portLayout() {
+    return program.portLayout();
+  }
+
   /** Where the instances a session starts are tracked, and from where a leak is finally killed. */
   public ProgramRegistry registry() {
     return registry;

@@ -64,6 +64,7 @@ import org.apache.solr.cats.exec.Shell;
 import org.apache.solr.cats.exec.ShellAssertionError;
 import org.apache.solr.cats.exec.ShellExecutor;
 import org.apache.solr.cats.exec.Variables;
+import org.apache.solr.cats.session.CatsCliHelpers;
 import org.apache.solr.cats.session.Transcript;
 import org.junit.AssumptionViolatedException;
 import org.slf4j.Logger;
@@ -105,7 +106,7 @@ public class CliSession implements AutoCloseable {
   private final String name;
   private final Path workDir;
   private final Transcript transcript;
-  private final SolrCliHelpers helpers = new SolrCliHelpers(this);
+  private final CatsCliHelpers helpers;
   private final Map<String, String> vars;
   private final Shell shell;
 
@@ -139,6 +140,7 @@ public class CliSession implements AutoCloseable {
     this.cwd = cwd;
     this.shell = shell;
     this.transcript = new Transcript(workDir.resolve("transcript.log"));
+    this.helpers = new CatsCliHelpers(harnessEnv, shell, transcript, varsForAssertions());
     // Exposed as a variable so a test can name its own scratch space inside a command line or an
     // assertion — ${WORK_DIR}/something — instead of formatting a Java path into the string.
     this.vars.put("WORK_DIR", workDir.toString());
@@ -515,8 +517,8 @@ public class CliSession implements AutoCloseable {
     return transcript;
   }
 
-  /** The Solr-aware conveniences for this session: collections, configs, HTTP, log dumps. */
-  public SolrCliHelpers helpers() {
+  /** The conveniences for this session that are not about running a command: HTTP, log tails. */
+  public CatsCliHelpers helpers() {
     return helpers;
   }
 

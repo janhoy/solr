@@ -32,9 +32,9 @@ import org.apache.solr.cats.ShellGate;
 import org.apache.solr.cats.exec.ProgramUnderTest;
 import org.apache.solr.cats.exec.RunningProgram;
 import org.apache.solr.cats.exec.Shell;
+import org.apache.solr.cats.session.CatsCliHelpers;
 import org.apache.solr.shell.env.SolrCatsHarnessEnv;
 import org.apache.solr.shell.session.CliSession;
-import org.apache.solr.shell.session.SolrCliHelpers;
 import org.junit.After;
 import org.junit.AssumptionViolatedException;
 import org.junit.Before;
@@ -611,8 +611,8 @@ public class CliSessionTest extends SolrTestCase {
 
   @Test
   public void headerAndRegexpAssertionsCoverTheCurlDashICasesOfTheBatsSuites() {
-    SolrCliHelpers.HttpResult result =
-        new SolrCliHelpers.HttpResult(
+    CatsCliHelpers.HttpResult result =
+        new CatsCliHelpers.HttpResult(
             200,
             "<html><script src=\"libs/solr/index.js\"></script></html>",
             HttpHeaders.of(
@@ -659,7 +659,7 @@ public class CliSessionTest extends SolrTestCase {
   public void anHttpsRequestThatCannotConnectIsReportedAsAFailureNotAStatus() {
     // Nothing is listening on the block this session claimed, which is the shape of the BATS
     // 'run ! curl https://...' line: no status, and the reason readable in the body.
-    SolrCliHelpers.HttpResult result =
+    CatsCliHelpers.HttpResult result =
         session.helpers().https(session.ports().at(0), "/solr/admin/info/system").get();
     result.assertConnectionFailed();
     assertTrue(result.body(), result.body().contains("Connect"));

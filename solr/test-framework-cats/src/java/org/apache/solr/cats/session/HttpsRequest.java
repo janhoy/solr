@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.session;
+package org.apache.solr.cats.session;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,15 +35,15 @@ import java.util.Set;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
 import org.apache.solr.cats.exec.Shell;
-import org.apache.solr.cats.session.Transcript;
-import org.apache.solr.shell.session.SolrCliHelpers.HttpResult;
+import org.apache.solr.cats.session.CatsCliHelpers.HttpResult;
 
 /**
  * A GET over HTTPS, carrying the client-side options the BATS suites express as {@code curl} flags:
- * a trust store ({@code --cacert}), credentials ({@code -u}) and the host to address the node by.
+ * a trust store ({@code --cacert}), credentials ({@code -u}) and the host to address the program
+ * by.
  *
- * <p>The plain-HTTP {@link SolrCliHelpers#http} takes no configuration and so is a method; TLS
- * takes several options, hence a builder. Obtained from {@link SolrCliHelpers#https(String)}, and
+ * <p>The plain-HTTP {@link CatsCliHelpers#http} takes no configuration and so is a method; TLS
+ * takes several options, hence a builder. Obtained from {@link CatsCliHelpers#https(String)}, and
  * what it returns is the same {@link HttpResult} a plain request returns.
  *
  * <p>This is what the {@code curl} lines of an SSL suite port to. There is no curl on a stock
@@ -79,8 +79,8 @@ public final class HttpsRequest {
   }
 
   /**
-   * Addresses the node by this name rather than {@code localhost}, which decides both the SNI name
-   * sent and the name the server certificate is checked against.
+   * Addresses the program by this name rather than {@code localhost}, which decides both the SNI
+   * name sent and the name the server certificate is checked against.
    */
   public HttpsRequest host(String hostName) {
     this.host = hostName;

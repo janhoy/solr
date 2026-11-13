@@ -40,11 +40,12 @@ import org.apache.solr.cats.exec.CatsFiles;
 import org.apache.solr.cats.exec.CommandResult;
 import org.apache.solr.cats.exec.ProcessKill;
 import org.apache.solr.cats.exec.RunningProgram;
+import org.apache.solr.cats.session.CatsCliHelpers;
+import org.apache.solr.cats.session.HttpsRequest;
 import org.apache.solr.shell.env.SolrCatsHarnessEnv;
 import org.apache.solr.shell.env.SolrPorts;
 import org.apache.solr.shell.exec.SolrProgram;
 import org.apache.solr.shell.session.CliSession;
-import org.apache.solr.shell.session.HttpsRequest;
 import org.apache.solr.shell.session.SolrCliHelpers;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -408,48 +409,48 @@ public abstract class SolrShellTestCase extends SolrTestCase {
     cli.awaitOrFail(what, waitTimeout, interval, condition);
   }
 
-  protected SolrCliHelpers.HttpResult http(String pathAndQuery) {
+  protected CatsCliHelpers.HttpResult http(String pathAndQuery) {
     return cli.helpers().http(pathAndQuery);
   }
 
-  protected SolrCliHelpers.HttpResult http(int port, String pathAndQuery) {
+  protected CatsCliHelpers.HttpResult http(int port, String pathAndQuery) {
     return cli.helpers().http(port, pathAndQuery);
   }
 
-  protected SolrCliHelpers.HttpResult http(
+  protected CatsCliHelpers.HttpResult http(
       String pathAndQuery, Map<String, String> requestHeaders) {
     return cli.helpers().http(pathAndQuery, requestHeaders);
   }
 
-  protected SolrCliHelpers.HttpResult http(
+  protected CatsCliHelpers.HttpResult http(
       int port, String pathAndQuery, Map<String, String> requestHeaders) {
     return cli.helpers().http(port, pathAndQuery, requestHeaders);
   }
 
-  protected SolrCliHelpers.HttpResult http(String pathAndQuery, String user, String password) {
+  protected CatsCliHelpers.HttpResult http(String pathAndQuery, String user, String password) {
     return cli.helpers().http(pathAndQuery, user, password);
   }
 
-  protected SolrCliHelpers.HttpResult http(
+  protected CatsCliHelpers.HttpResult http(
       int port, String pathAndQuery, String user, String password) {
     return cli.helpers().http(port, pathAndQuery, user, password);
   }
 
-  protected SolrCliHelpers.HttpResult httpPost(
+  protected CatsCliHelpers.HttpResult httpPost(
       String pathAndQuery, String contentType, String body) {
     return cli.helpers().httpPost(pathAndQuery, contentType, body);
   }
 
-  protected SolrCliHelpers.HttpResult httpPost(
+  protected CatsCliHelpers.HttpResult httpPost(
       int port, String pathAndQuery, String contentType, String body) {
     return cli.helpers().httpPost(port, pathAndQuery, contentType, body);
   }
 
-  protected SolrCliHelpers.HttpResult httpPut(String pathAndQuery, String contentType, Path file) {
+  protected CatsCliHelpers.HttpResult httpPut(String pathAndQuery, String contentType, Path file) {
     return cli.helpers().httpPut(pathAndQuery, contentType, file);
   }
 
-  protected SolrCliHelpers.HttpResult httpPut(
+  protected CatsCliHelpers.HttpResult httpPut(
       int port, String pathAndQuery, String contentType, Path file) {
     return cli.helpers().httpPut(port, pathAndQuery, contentType, file);
   }
@@ -462,24 +463,29 @@ public abstract class SolrShellTestCase extends SolrTestCase {
     return cli.helpers().https(port, pathAndQuery);
   }
 
+  /** The Solr half of the helpers, which the generic session does not hand back. */
+  private SolrCliHelpers solrHelpers() {
+    return new SolrCliHelpers(cli);
+  }
+
   protected boolean collectionExists(String collection) {
-    return cli.helpers().collectionExists(collection);
+    return solrHelpers().collectionExists(collection);
   }
 
   protected boolean configExists(String configName) {
-    return cli.helpers().configExists(configName);
+    return solrHelpers().configExists(configName);
   }
 
   protected void deleteAllCollections() {
-    cli.helpers().deleteAllCollections();
+    solrHelpers().deleteAllCollections();
   }
 
   protected void shutdownAll() {
-    cli.helpers().shutdownAll();
+    solrHelpers().shutdownAll();
   }
 
   protected void dumpSolrLog() {
-    cli.helpers().dumpSolrLog();
+    solrHelpers().dumpSolrLog();
   }
 
   // ---------------------------------------------------------------- lifecycle internals
