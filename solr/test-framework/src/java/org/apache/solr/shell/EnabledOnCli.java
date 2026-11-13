@@ -32,20 +32,20 @@ import java.lang.annotation.Target;
  *
  * <pre>
  *   &#64;Test
- *   &#64;EnabledOnCli(Cli.PICOCLI)
+ *   &#64;EnabledOnCli("picocli")
  *   public void picocliRejectsMutuallyExclusiveOptions() { ... }
  * </pre>
  *
  * <p>On a class it skips before any Solr starts, so a {@code @BeforeClass} that starts a node costs
  * nothing on the other implementation.
  *
- * @see Cli
+ * @see CliGate
  * @see org.apache.solr.cats.EnabledOnShell
  */
 @Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface EnabledOnCli {
 
-  /** The implementations this test is meant for. */
-  Cli[] value();
+  /** The implementations this test is meant for: {@code picocli}, {@code commons-cli}. */
+  String[] value();
 }

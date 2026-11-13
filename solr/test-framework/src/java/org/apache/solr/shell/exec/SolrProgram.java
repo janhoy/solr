@@ -19,6 +19,7 @@ package org.apache.solr.shell.exec;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.apache.solr.cats.env.PortLayout;
 import org.apache.solr.cats.exec.ProgramUnderTest;
@@ -108,5 +109,25 @@ public final class SolrProgram implements ProgramUnderTest {
   public List<Path> staleStateFiles(Path stateDir, int port) {
     return List.of(
         stateDir.resolve("solr-" + port + ".pid"), stateDir.resolve("solr-" + port + ".port"));
+  }
+
+  /**
+   * One trait, {@code cli}: which command-line implementation {@code bin/solr} dispatches to,
+   * either {@code picocli} or {@code commons-cli}.
+   *
+   * <p>The two mostly agree, but not on every word of their usage and error text, so a test
+   * asserting on wording may hold for only one of them: {@link org.apache.solr.shell.EnabledOnCli}
+   * skips such a test on the other, and {@code SolrShellTestCase#forCli} picks the right wording
+   * for whichever is running.
+   *
+   * <p>The default tracks {@code SolrCLI.main}, which reads {@code solr.picocli} and defaulted to
+   * picocli in SOLR-18561. Keep the two in step: a run that pins neither takes whichever CLI {@code
+   * bin/solr} dispatches to, and a mismatch here has the suites assert one implementation's wording
+   * against the other's output.
+   */
+  @Override
+  public Map<String, String> traits(Map<String, String> env) {
+    boolean picocli = Boolean.parseBoolean(env.getOrDefault("SOLR_PICOCLI", "true"));
+    return Map.of("cli", picocli ? "picocli" : "commons-cli");
   }
 }

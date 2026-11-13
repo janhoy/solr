@@ -201,29 +201,24 @@ public abstract class SolrShellTestCase extends SolrTestCase {
     return harnessEnv.ports();
   }
 
-  /** The command-line implementation this run targets. */
-  protected static Cli cli() {
-    return harnessEnv.cli();
+  /** The named traits of this run: which CLI it targets. */
+  protected Map<String, String> traits() {
+    return cli.traits();
+  }
+
+  /** The wording trait {@code name}'s value calls for in this run. */
+  protected String wordingFor(String name, Map<String, String> byValue) {
+    return cli.wordingFor(name, byValue);
   }
 
   /** The wording for the command-line implementation this run targets. */
   // TODO: Remove this once the commons-cli cleanup happens.
   protected String forCli(String commonsCliText, String picocliText) {
-    return harnessEnv.cli() == Cli.PICOCLI ? picocliText : commonsCliText;
+    return wordingFor("cli", Map.of("commons-cli", commonsCliText, "picocli", picocliText));
   }
 
-  /**
-   * Skips the test, or the class, when {@link EnabledOnCli} does not name the implementation this
-   * run targets.
-   */
   private static void requireCli(EnabledOnCli restriction) {
-    if (restriction == null) {
-      return;
-    }
-    List<Cli> allowed = List.of(restriction.value());
-    assumeTrue(
-        "Only runs on " + allowed + "; this run uses " + harnessEnv.cli(),
-        allowed.contains(harnessEnv.cli()));
+    CliGate.requireCli(harnessEnv.traits(), restriction);
   }
 
   private static void requireShell(EnabledOnShell restriction) {

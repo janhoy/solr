@@ -25,7 +25,6 @@ import java.util.Set;
 import org.apache.solr.cats.env.CatsHarnessEnv;
 import org.apache.solr.cats.env.PortBlock;
 import org.apache.solr.cli.SolrProcessManager;
-import org.apache.solr.shell.Cli;
 import org.apache.solr.shell.exec.SolrProgram;
 
 /**
@@ -200,14 +199,5 @@ public final class SolrCatsHarnessEnv extends CatsHarnessEnv {
 
   public Path testOutputDir() {
     return outputDir();
-  }
-
-  /**
-   * Which command-line implementation {@code bin/solr} will dispatch to for this run.
-   *
-   * <p>Defaulting lives in {@link Cli#of}, so every reader of it agrees.
-   */
-  public Cli cli() {
-    return Cli.of(vars());
   }
 }

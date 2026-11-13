@@ -235,6 +235,11 @@ public abstract class CatsHarnessEnv {
     return baseEnv;
   }
 
+  /** The named traits of this run, as the program reads them off the environment it is given. */
+  public Map<String, String> traits() {
+    return program.traits(vars);
+  }
+
   /** The ports this scope owns. */
   public PortBlock ports() {
     return ports;

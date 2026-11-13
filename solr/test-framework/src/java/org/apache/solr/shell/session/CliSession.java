@@ -52,6 +52,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.apache.solr.cats.SuppressForbidden;
+import org.apache.solr.cats.Traits;
 import org.apache.solr.cats.env.CatsHarnessEnv;
 import org.apache.solr.cats.env.PortBlock;
 import org.apache.solr.cats.exec.CatsFiles;
@@ -499,6 +500,16 @@ public class CliSession implements AutoCloseable {
 
   public CatsHarnessEnv harnessEnv() {
     return harnessEnv;
+  }
+
+  /** The named traits of this session's run, as the program reads them off its environment. */
+  public Map<String, String> traits() {
+    return program.traits(vars);
+  }
+
+  /** The wording trait {@code name}'s value calls for in this run. */
+  public String wordingFor(String name, Map<String, String> byValue) {
+    return Traits.wordingFor(traits(), name, byValue);
   }
 
   /** The variable-name prefixes an unresolved {@code ${NAME}} lists as defined. */
