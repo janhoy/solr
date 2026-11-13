@@ -36,13 +36,12 @@ import org.apache.solr.cats.session.CatsCliHelpers;
 import org.apache.solr.shell.env.SolrCatsHarnessEnv;
 import org.apache.solr.shell.session.CliSession;
 import org.junit.After;
-import org.junit.AssumptionViolatedException;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 
 /**
- * Unit tests for the harness itself — {@code env}, {@code cd}, {@code run}, {@code script},
+ * Unit tests for the harness itself — {@code env}, {@code cd}, {@code run}, {@code runWithStdin},
  * variable resolution, quoting, timeouts — with no Solr involved.
  *
  * <p>Deliberately uses only shell built-ins, so it needs no unpacked distribution and runs in a
@@ -92,12 +91,11 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
+  @EnabledOnShell("bash") // Reading the environment back needs the shell's own spelling.
   public void envReachesTheShell() {
     session.env("MARKER", "hello world");
-    session
-        .script("echo \"$MARKER\"", "echo %MARKER%")
-        .assertExitCode(0)
-        .assertExact("hello world");
+    session.allowShellSpecific();
+    session.run("printenv MARKER").assertExitCode(0).assertExact("hello world");
   }
 
   @Test
@@ -117,10 +115,7 @@ public class CliSessionTest extends SolrTestCase {
 
   @Test
   public void harnessVariablesArePresent() {
-    session
-        .script("echo \"$SOLR_HOME\"", "echo %SOLR_HOME%")
-        .assertExitCode(0)
-        .assertExact(env.solrHome().toString());
+    session.run("echo ${SOLR_HOME}").assertExitCode(0).assertExact(env.solrHome().toString());
   }
 
   @Test
@@ -211,62 +206,24 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
-  public void scriptLeavesShellVariablesToTheShell() {
-    // A script has its own locals and positional parameters, so the harness must not touch $NAME.
-    // Here bash expands ZK_PORT from the environment, and sets and reads a local of its own.
-    session
-        .script("mine=abc; echo \"$ZK_PORT-$mine\"", "set mine=abc\r\necho %ZK_PORT%-%mine%")
-        .assertExact(env.ports().zk() + "-abc");
-  }
-
-  @Test
-  public void scriptStillResolvesDoubleBraces() {
-    session
-        .script("echo {{ZK_PORT}}", "echo {{ZK_PORT}}")
-        .assertExact(String.valueOf(env.ports().zk()));
-  }
-
-  @Test
-  public void scriptSkipsWhenTheCurrentShellHasNoBody() {
-    boolean bash = "bash".equals(session.shell().id());
-    expectThrows(
-        AssumptionViolatedException.class,
-        () -> {
-          if (bash) {
-            session.script(null, "echo cmd-only");
-          } else {
-            session.script("echo bash-only", null);
-          }
-        });
-  }
-
-  @Test
-  public void aScriptBodyMayOpenWithTheShellsOwnSyntax() {
-    // cmd.exe cannot 'call' its own batch syntax, so Shells.CMD has to hand such a line over as-is.
-    session
-        .script("for i in 1 2; do echo n$i; done", "for /l %%i in (1,1,2) do @echo n%%i")
-        .assertLineCount(2)
-        .assertContains("n2");
-    session.script("if true; then echo yes; fi", "if 1==1 echo yes").assertExact("yes");
-  }
-
-  @Test
   @EnabledOnShell("bash") // About bash's brace expansion specifically.
   public void bashLeavesDoubleBracesAlone() {
     // Guards the choice of delimiter. 'not-a-var' is not a legal placeholder name, so the harness
     // passes it through untouched and bash gets to see it — unquoted, with brace expansion live.
     // Bash only expands braces containing a comma or '..', so it arrives verbatim.
-    session.script("echo {{not-a-var}}", "echo {{not-a-var}}").assertExact("{{not-a-var}}");
+    session.run("echo {{not-a-var}}").assertExact("{{not-a-var}}");
   }
 
   @Test
+  @EnabledOnShell("bash") // 'pwd' is the shell's own; the harness offers cwd() instead.
   public void cdChangesTheWorkingDirectory() throws IOException {
     // Compared as strings: createTempDir hands back a Lucene FilterPath, while the session
     // resolves against its own cwd and produces a plain filesystem Path.
     Path target = createTempDir("elsewhere").toRealPath();
     session.cd(target);
     assertEquals(target.toString(), session.cwd().toString());
-    session.script("pwd", "cd").assertExitCode(0).assertExact(target.toString());
+    session.allowShellSpecific();
+    session.run("pwd").assertExitCode(0).assertExact(target.toString());
   }
 
   @Test
@@ -275,15 +232,22 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
+  @EnabledOnShell("bash") // 'exit' is spelled 'exit /b' on cmd.exe.
   public void exitStatusIsReported() {
-    session.script("exit 3", "exit /b 3").assertExitCode(3);
-    session.script("exit 0", "exit /b 0").assertExitCode(0);
+    session.allowShellSpecific();
+    session.tryRun("exit 3").assertExitCode(3);
+    session.tryRun("exit 0").assertExitCode(0);
   }
 
   @Test
-  public void stderrIsMergedByDefaultAndSeparableOnRequest() {
-    session.script("echo out; echo err 1>&2", "echo out\r\necho err 1>&2").assertContains("err");
+  @EnabledOnShell("bash") // Writing to stderr at all needs the shell's own redirection syntax.
+  public void stderrIsMergedByDefault() {
+    session.allowShellSpecific();
+    session.run("echo out; echo err 1>&2").assertContains("out").assertContains("err");
+  }
 
+  @Test
+  public void stdoutAndStderrAreSeparableOnRequest() {
     var separated = session.runSeparated("echo ${ZK_PORT}");
     assertEquals(String.valueOf(env.ports().zk()), separated.stdout());
     assertEquals("", separated.stderr());
@@ -317,23 +281,75 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
+  @EnabledOnShell("bash") // 'sleep' is the shell's own; the harness offers awaitOrFail().
   public void aCommandThatNeverEndsFailsOnItsTimeout() {
     session.timeout(Duration.ofSeconds(2));
-    AssertionError failure =
-        expectThrows(
-            AssertionError.class, () -> session.script("sleep 60", "ping -n 61 127.0.0.1 >nul"));
+    session.allowShellSpecific();
+    AssertionError failure = expectThrows(AssertionError.class, () -> session.run("sleep 60"));
     assertTrue(failure.getMessage(), failure.getMessage().contains("did not finish within 2s"));
     assertTrue(session.lastResult().timedOut());
   }
 
   @Test
+  @EnabledOnShell("bash") // Prompting for input needs the shell's own 'read'.
   public void stdinIsClosedSoAPromptCannotHang() {
     // Redirecting stdin from the null device is what stops an interactive command blocking the
-    // build: the prompt sees EOF at once. What matters cross-shell is that it returns at all, not
-    // what an unset variable then expands to, which the two shells spell differently.
+    // build: the prompt sees EOF at once. What matters is that the command returns at all, not
+    // what the unread variable then expands to.
     session.timeout(Duration.ofSeconds(10));
-    session.script("read answer; echo done", "set /p answer=\r\necho done").assertContains("done");
+    session.allowShellSpecific();
+    session.run("read answer; echo done").assertContains("done");
     assertFalse(session.lastResult().timedOut());
+  }
+
+  // ------------------------------------------------------- standard input
+  // Checked with 'cat', which does nothing but hand back what it was fed. That is bash's own, so
+  // these are bash-only; the cmd.exe half of the primitive is covered by PostTest.stdinMode, whose
+  // one line is the same on both shells.
+
+  @Test
+  @EnabledOnShell("bash")
+  public void stdinCarriesTextThroughUntouched() {
+    session.allowShellSpecific();
+    session.runWithStdin("plain text\n", "cat").assertExact("plain text");
+  }
+
+  @Test
+  @EnabledOnShell("bash")
+  public void stdinCarriesSeveralLines() {
+    session.allowShellSpecific();
+    session
+        .runWithStdin("first\nsecond\n", "cat")
+        .assertLineCount(2)
+        .assertContains("first")
+        .assertContains("second");
+  }
+
+  @Test
+  @EnabledOnShell("bash")
+  public void stdinCarriesQuotesNoShellWouldPassAsAnArgument() {
+    session.allowShellSpecific();
+    // Both quote characters at once, which cmd.exe cannot carry as an argument at all, plus the %
+    // it would expand. This is the shape PostTest.stdinMode feeds solr post.
+    String payload = "{'commit': {}, \"also\": \"100%\"}";
+    session.runWithStdin(payload, "cat").assertExact(payload);
+  }
+
+  @Test
+  @EnabledOnShell("bash")
+  public void stdinCarriesNonAsciiAsUtf8() {
+    session.allowShellSpecific();
+    session.runWithStdin("blåbær ☃\n", "cat").assertExact("blåbær ☃");
+  }
+
+  @Test
+  @EnabledOnShell("bash")
+  public void stdinIsRecordedInTheTranscript() {
+    session.allowShellSpecific();
+    session.runWithStdin("recorded\n", "cat");
+    String transcript = session.transcript().text();
+    assertTrue(transcript, transcript.contains("on standard input:"));
+    assertTrue(transcript, transcript.contains("recorded"));
   }
 
   @Test
@@ -369,10 +385,11 @@ public class CliSessionTest extends SolrTestCase {
   }
 
   @Test
+  @EnabledOnShell("bash") // 'exit' is spelled 'exit /b' on cmd.exe.
   public void aFailingExitStatusIsReportedPlainly() {
+    session.allowShellSpecific();
     AssertionError failure =
-        expectThrows(
-            AssertionError.class, () -> session.script("exit 3", "exit /b 3").assertExitCode(0));
+        expectThrows(AssertionError.class, () -> session.tryRun("exit 3").assertExitCode(0));
     assertTrue(
         failure.getMessage(),
         failure.getMessage().contains("FAILED: command exited 3, expected 0"));
@@ -384,7 +401,8 @@ public class CliSessionTest extends SolrTestCase {
     // Found on Windows, where bin/solr.cmd output comes back in the console code page: strict
     // decoding turned a passing command into a MalformedInputException. Nothing guarantees a
     // command's bytes are UTF-8, so decoding replaces rather than throws.
-    session.script("printf 'before\\xffafter\\n'", null).assertExitCode(0).assertContains("before");
+    session.allowShellSpecific();
+    session.run("printf 'before\\xffafter\\n'").assertExitCode(0).assertContains("before");
     session.lastResult().assertContains("after");
   }
 
@@ -457,7 +475,7 @@ public class CliSessionTest extends SolrTestCase {
     UnsupportedOperationException e =
         expectThrows(
             UnsupportedOperationException.class, () -> session.run(List.of("echo", "a^b")));
-    assertTrue(e.getMessage(), e.getMessage().contains("script(bashBody, cmdBody)"));
+    assertTrue(e.getMessage(), e.getMessage().contains("standard input"));
   }
 
   @Test
@@ -476,30 +494,7 @@ public class CliSessionTest extends SolrTestCase {
     UnsupportedOperationException e =
         expectThrows(
             UnsupportedOperationException.class, () -> session.run(List.of("echo", "a\"b")));
-    assertTrue(e.getMessage(), e.getMessage().contains("script(bashBody, cmdBody)"));
-  }
-
-  @Test
-  @EnabledOnShell("cmd")
-  public void cmdScriptsMayBeMultiLine() {
-    // 'call' takes one command, so a multi-line body is written verbatim instead. This is what
-    // script(bash, cmd) exists for.
-    session
-        .script(null, "set first=one\r\nset second=two\r\necho %first%-%second%")
-        .assertExitCode(0)
-        .assertExact("one-two");
-  }
-
-  @Test
-  @EnabledOnShell("cmd")
-  public void aCmdScriptRejectsADollarVariable() {
-    // cmd.exe does not expand $NAME, so it would reach the command as text. Caught because the
-    // bash body of the same script() call does expand it, which makes the mistake look fine until
-    // it runs on Windows.
-    AssertionError failure =
-        expectThrows(
-            AssertionError.class, () -> session.script("echo ${ZK_PORT}", "echo ${ZK_PORT}"));
-    assertTrue(failure.getMessage(), failure.getMessage().contains("{{ZK_PORT}}"));
+    assertTrue(e.getMessage(), e.getMessage().contains("standard input"));
   }
 
   @Test
@@ -508,7 +503,6 @@ public class CliSessionTest extends SolrTestCase {
     // Windows environment names are case-insensitive, so the harness keeps its env map that way.
     session.env("MiXeD_Case_Var", "value");
     assertEquals("value", session.env("mixed_case_var"));
-    session.script(null, "echo %MIXED_CASE_VAR%").assertExitCode(0).assertExact("value");
   }
 
   // ------------------------------------------------------- portability rails
@@ -560,10 +554,10 @@ public class CliSessionTest extends SolrTestCase {
   // ------------------------------------------------------- output extraction
 
   @Test
+  @EnabledOnShell("bash") // Emitting three fixed lines needs the shell's own 'printf'.
   public void outputExtractionReplacesTheUnixTextTools() {
-    var result =
-        session.script(
-            "printf 'alpha 1\\nbeta 2\\ngamma 3\\n'", "(echo alpha 1&echo beta 2&echo gamma 3)");
+    session.allowShellSpecific();
+    var result = session.run("printf 'alpha 1\\nbeta 2\\ngamma 3\\n'");
     result.assertLineCount(3);
     assertEquals(List.of("beta 2"), result.linesMatching("^beta"));
     assertEquals(List.of("alpha 1"), result.firstLines(1));

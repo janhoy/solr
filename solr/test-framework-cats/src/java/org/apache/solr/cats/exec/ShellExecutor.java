@@ -42,8 +42,9 @@ import org.apache.solr.cats.SuppressForbidden;
  * Runs one command line in a fresh shell process and collects the result.
  *
  * <p>stdout and stderr always go to <em>files</em>, never pipes: a detached Solr JVM that inherits
- * a file handle cannot block the harness, while one that inherits a pipe can. stdin is the null
- * device, so a command that prompts for input fails fast instead of hanging.
+ * a file handle cannot block the harness, while one that inherits a pipe can. stdin is a file too —
+ * the null device unless the caller supplies text, so a command that prompts for input fails fast
+ * instead of hanging.
  */
 public final class ShellExecutor {
 
@@ -62,6 +63,7 @@ public final class ShellExecutor {
    *     assertion names one that is not
    * @param separateStreams keep stdout and stderr apart instead of merging them like BATS' {@code
    *     run} does
+   * @param stdin text to feed the command on its standard input, or null for the null device
    */
   public record Spec(
       String line,
@@ -73,6 +75,7 @@ public final class ShellExecutor {
       String tag,
       Duration timeout,
       boolean separateStreams,
+      String stdin,
       CommandHistory history) {}
 
   /**
@@ -93,7 +96,7 @@ public final class ShellExecutor {
       pb.directory(spec.cwd().toFile());
       pb.environment().clear();
       pb.environment().putAll(spec.env());
-      pb.redirectInput(Redirect.from(nullDevice()));
+      pb.redirectInput(Redirect.from(stdinSource(spec)));
       pb.redirectOutput(Redirect.to(stdoutFile.toFile()));
       if (spec.separateStreams()) {
         pb.redirectError(Redirect.to(stderrFile.toFile()));
@@ -177,6 +180,21 @@ public final class ShellExecutor {
       text = text.substring(0, text.length() - 1);
     }
     return text;
+  }
+
+  /**
+   * Where the command reads its standard input: a file holding the caller's text, or the null
+   * device. A file rather than a pipe, so that the two shells behave identically and no writer
+   * thread can deadlock against a command that never reads.
+   */
+  @SuppressForbidden(reason = "ProcessBuilder.Redirect only accepts java.io.File")
+  private static File stdinSource(Spec spec) throws IOException {
+    if (spec.stdin() == null) {
+      return nullDevice();
+    }
+    Path file = spec.workDir().resolve(spec.tag() + ".in");
+    Files.writeString(file, spec.stdin(), StandardCharsets.UTF_8);
+    return file.toFile();
   }
 
   @SuppressForbidden(reason = "ProcessBuilder.Redirect only accepts java.io.File")

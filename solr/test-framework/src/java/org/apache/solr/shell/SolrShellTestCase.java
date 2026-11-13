@@ -260,8 +260,9 @@ public abstract class SolrShellTestCase extends SolrTestCase {
     return cli.runSeparated(line);
   }
 
-  protected CommandResult script(String bashScript, String cmdScript) {
-    return cli.script(bashScript, cmdScript);
+  /** For a command that reads its input: the text goes in on standard input, not through a pipe. */
+  protected CommandResult runWithStdin(String stdin, String line) {
+    return cli.runWithStdin(stdin, line);
   }
 
   protected CommandResult lastResult() {

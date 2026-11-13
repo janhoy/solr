@@ -68,7 +68,6 @@ import org.apache.solr.cats.exec.Shells;
 import org.apache.solr.cats.exec.Variables;
 import org.apache.solr.cats.session.CatsCliHelpers;
 import org.apache.solr.cats.session.Transcript;
-import org.junit.AssumptionViolatedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -675,43 +674,18 @@ public class CliSession implements AutoCloseable {
   }
 
   /**
-   * Escape hatch for shell-specific, possibly multi-line logic. The script for the current shell
-   * runs as a single process; passing null for it means the test cannot run here.
+   * Like {@link #run(String)} but feeds {@code stdin} to the command on its standard input.
    *
-   * <p>{@code $NAME} and {@code %NAME%} are left entirely to the shell here — a script has its own
-   * locals, loop variables and positional parameters. {@code {{NAME}}} is the one form the harness
-   * still resolves, for a harness value the shell should not see as a variable at all.
-   *
-   * @throws AssumptionViolatedException if the current shell has no script
+   * <p>The text goes in through the process itself rather than through a shell pipe, so one line
+   * works on every shell and nothing in it has to be quoted or escaped. The command line is still
+   * held to the cross-shell rails.
    */
-  public CommandResult script(String bashScript, String cmdScript) {
-    requireOpen();
-    String chosen = "bash".equals(shell.id()) ? bashScript : cmdScript;
-    if (chosen == null) {
-      throw new AssumptionViolatedException("No " + shell + " script supplied for this test");
+  public CommandResult runWithStdin(String stdin, String line) {
+    requireSingleCommand(line);
+    if (!shellSpecific) {
+      requirePortableLine(line);
     }
-    if ("cmd".equals(shell.id())) {
-      // cmd.exe has no $NAME syntax at all, so one in a cmd body is dead text that will reach the
-      // command verbatim. Worth catching, because the bash body of the same script() call expands
-      // it from the environment and therefore appears to work — exactly how the stdin test in the
-      // test_post.bats port came to pass on bash and fail on Windows.
-      Matcher stray = Variables.ANY.matcher(chosen);
-      while (stray.find()) {
-        if (stray.group().startsWith("$")) {
-          throw new AssertionError(
-              "cmd.exe does not expand "
-                  + stray.group()
-                  + ", so it would reach the command as text. Write {{"
-                  + stray.group().replaceAll("[${}]", "")
-                  + "}} to have the harness resolve it, or %NAME% if the shell really should.\n"
-                  + chosen);
-        }
-      }
-    }
-    return execute(
-        Variables.resolve(chosen, Variables.BRACES_ONLY, vars, "a script", echoedPrefixes()),
-        timeout,
-        false);
+    return requireExit(execute(resolveForRun(line), timeout, false, stdin), true);
   }
 
   private void requireOpen() {
@@ -733,8 +707,7 @@ public class CliSession implements AutoCloseable {
   private void requireSingleCommand(String line) {
     if (line.strip().contains("\n")) {
       throw new AssertionError(
-          "A run() line must be a single command; use script(bashBody, cmdBody) for several: "
-              + line);
+          "A run() line must be a single command; make it one run() call each: " + line);
     }
   }
 
@@ -796,8 +769,8 @@ public class CliSession implements AutoCloseable {
           Map.entry("pwd", "cwd()"),
           Map.entry("export", "env(name, value)"),
           Map.entry("unset", "unset(name)"),
-          Map.entry("source", "script(bashBody, cmdBody) if it really is shell-specific"),
-          Map.entry("eval", "script(bashBody, cmdBody) if it really is shell-specific"));
+          Map.entry("source", "env(name, value) for what it would set, or @EnabledOnShell"),
+          Map.entry("eval", "build the line in Java, or @EnabledOnShell"));
 
   /**
    * Shell operators with no cmd.exe equivalent. Double quotes neutralise all of these, so they are
@@ -806,7 +779,7 @@ public class CliSession implements AutoCloseable {
   private static final List<String[]> UNPORTABLE_OPERATORS =
       List.of(
           new String[] {
-            "|", "a pipe", "assert on the command's own output, or use script(bashBody, cmdBody)"
+            "|", "a pipe", "assert on the command's own output, or feed it with runWithStdin()"
           },
           new String[] {"&&", "a chained command", "run() is one command; make it two run() calls"},
           new String[] {
@@ -913,8 +886,8 @@ public class CliSession implements AutoCloseable {
               + "' does not exist on cmd.exe, so this command could only ever pass on bash.\n"
               + "Instead: "
               + replacement
-              + ".\nIf the test genuinely is shell-specific, use script(bashBody, cmdBody) and "
-              + "@EnabledOnShell.");
+              + ".\nIf the test genuinely is shell-specific, mark it @EnabledOnShell, which "
+              + "stands the rails down.");
     }
   }
 
@@ -932,17 +905,25 @@ public class CliSession implements AutoCloseable {
               + line
               + "\nWrite ${"
               + cmdForm.group(1)
-              + "} instead — the harness resolves that for every shell — or move the line into "
-              + "script(bash, cmd) if it really is shell-specific.");
+              + "} instead — the harness resolves that for every shell — or mark the test "
+              + "@EnabledOnShell if it really is shell-specific.");
     }
     return resolved;
   }
 
   private CommandResult execute(String rawLine, Duration commandTimeout, boolean separateStreams) {
+    return execute(rawLine, commandTimeout, separateStreams, null);
+  }
+
+  private CommandResult execute(
+      String rawLine, Duration commandTimeout, boolean separateStreams, String stdin) {
     // stripTrailing so a """ text block whose closing delimiter sits on its own line — which
     // carries a trailing newline — behaves the same as a plain string.
     String line = rawLine.stripTrailing();
     Map<String, String> envDiff = envDiff();
+    if (stdin != null) {
+      transcript.note("on standard input:\n" + stdin);
+    }
     ShellExecutor.Spec spec =
         new ShellExecutor.Spec(
             line,
@@ -954,6 +935,7 @@ public class CliSession implements AutoCloseable {
             "cmd-" + SEQ.incrementAndGet(),
             commandTimeout,
             separateStreams,
+            stdin,
             transcript);
     CommandResult result = ShellExecutor.execute(spec, startedProcesses::add);
     lastResult = result;

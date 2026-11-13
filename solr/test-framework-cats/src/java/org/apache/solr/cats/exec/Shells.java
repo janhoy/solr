@@ -162,20 +162,20 @@ public final class Shells {
      * predictable: a double quote, which has no escape surviving cmd's quote counting and the
      * target program's parser at once, and a caret, which the {@code call} used for a single
      * command doubles as it re-parses its line, so {@code "a^b"} arrives as {@code "a^^b"}. Pass
-     * either with {@code script(bashBody, cmdBody)}.
+     * either on standard input instead, or via a file.
      */
     @Override
     public String quote(String arg) {
       if (arg.indexOf('"') >= 0) {
         throw new UnsupportedOperationException(
             "cmd.exe has no escape for a double quote that survives both its own quote counting "
-                + "and the target program's parser. Use script(bashBody, cmdBody) for: "
+                + "and the target program's parser. Pass it on standard input, or via a file: "
                 + arg);
       }
       if (arg.indexOf('^') >= 0) {
         throw new UnsupportedOperationException(
             "cmd.exe doubles a caret when 'call' re-parses the line, so it cannot be passed as an "
-                + "argument. Use script(bashBody, cmdBody) for: "
+                + "argument. Pass it on standard input, or via a file: "
                 + arg);
       }
       String escaped = arg.replace("%", "%%");

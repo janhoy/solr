@@ -44,15 +44,6 @@ public final class Variables {
               + "|\\$([A-Za-z_][A-Za-z0-9_]*)");
 
   /**
-   * {@code {{NAME}}} alone — the only form resolved inside a shell-specific script, where {@code $}
-   * belongs to the shell.
-   *
-   * <p>Double braces are inert in both bash, which only expands braces containing a comma or {@code
-   * ..}, and cmd.exe.
-   */
-  public static final Pattern BRACES_ONLY = Pattern.compile("\\{\\{([A-Za-z_][A-Za-z0-9_]*)}}");
-
-  /**
    * The cmd.exe spelling. Never resolved, because {@code %} is also {@link String#format}'s, but
    * worth rejecting in a command line so that one written this way cannot pass on Windows and fail
    * on bash.
