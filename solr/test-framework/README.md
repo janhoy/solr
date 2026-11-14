@@ -27,7 +27,7 @@ Built on `lucene-test-framework`: `SolrTestCase` extends `LuceneTestCase`, so te
 | --- | --- |
 | `SolrTestCase` | Default. Anything needing no Solr core. |
 | `cloud.SolrCloudTestCase` | You need a real cluster: in-JVM `MiniSolrCloudCluster` with embedded ZooKeeper. |
-| `shell.SolrShellTestCase` | You are testing `bin/solr` / `bin\solr.cmd` itself, as a real subprocess. |
+| `shell.SolrCatsTestCase` | You are testing `bin/solr` / `bin\solr.cmd` itself, as a real subprocess. |
 | `BaseDistributedSearchTestCase` | Distributed-search comparisons against a control core. |
 | `SolrTestCaseJ4` | Legacy. Don't extend it in new tests. |
 
@@ -41,7 +41,7 @@ Deliberately thin — its javadoc asks you to keep it that way. It contributes t
 
 `configureCluster(n).addConfig("conf", ExternalPaths.DEFAULT_CONFIGSET).configure()` in `@BeforeClass`; the cluster is the static `cluster` field and is shut down for you. Neighbours: `MultiSolrCloudTestCase`, `SolrCloudAuthTestCase`, `ChaosMonkey` and `SocketProxy` for fault injection.
 
-## SolrShellTestCase
+## SolrCatsTestCase
 
 CATS — Cross-platform Automated Testing System — the harness for the start scripts: one Java test runs `bin/solr` under bash and `bin\solr.cmd` under cmd.exe, which the BATS suites cannot do. Suites live in `solr/packaging/src/test/org/apache/solr/shell/`; the harness' own unit tests are in `src/test/org/apache/solr/shell/`.
 
@@ -96,7 +96,7 @@ The replacements are built in. File work, resolved against the session's cwd: `p
 
 ### Skipping
 
-`@EnabledOnShell(Shell.BASH|CMD)` and `@EnabledOnCli(Cli.PICOCLI|COMMONS_CLI)` work on a method or a class, and skip as assumption failures before any node starts. No annotation means the test must pass everywhere, which is what a ported BATS test normally should be. Where only wording differs, prefer `assertContainsForCli`. A test that drives the harness without extending `SolrShellTestCase` honours `@EnabledOnShell` via `@Rule public final ShellGate shellGate = new ShellGate();`.
+`@EnabledOnShell(Shell.BASH|CMD)` and `@EnabledOnCli(Cli.PICOCLI|COMMONS_CLI)` work on a method or a class, and skip as assumption failures before any node starts. No annotation means the test must pass everywhere, which is what a ported BATS test normally should be. Where only wording differs, prefer `assertContainsForCli`. A test that drives the harness without extending `SolrCatsTestCase` honours `@EnabledOnShell` via `@Rule public final ShellGate shellGate = new ShellGate();`.
 
 ### Isolation
 

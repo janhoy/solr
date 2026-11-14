@@ -57,7 +57,7 @@ import org.junit.rules.TestRule;
  * $TEST_FAILURE_DIR/<Class>-<method>/} and the path is printed, which is BATS' {@code
  * save_home_on_failure}.
  */
-public abstract class SolrShellTestCase extends SolrTestCase implements CatsDsl {
+public abstract class SolrCatsTestCase extends SolrTestCase implements CatsDsl {
 
   /** The program every session here drives: how a node is found, stopped and cleaned up after. */
   private static final SolrProgram PROGRAM = new SolrProgram();

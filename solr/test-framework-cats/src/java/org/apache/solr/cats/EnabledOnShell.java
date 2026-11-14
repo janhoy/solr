@@ -23,8 +23,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Restricts a {@code SolrShellTestCase} test, or a whole class of them, to particular shells. On
- * any other shell it is skipped as an assumption failure.
+ * Restricts a {@code SolrCatsTestCase} test, or a whole class of them, to particular shells. On any
+ * other shell it is skipped as an assumption failure.
  *
  * <p>Use it where {@code bin/solr} and {@code bin/solr.cmd} genuinely differ — an option only one
  * of them accepts, {@code solr.in.sh} versus {@code solr.in.cmd} handling, a Windows-only path
