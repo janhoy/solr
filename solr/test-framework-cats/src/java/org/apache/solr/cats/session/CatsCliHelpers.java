@@ -50,8 +50,9 @@ import org.apache.solr.cats.exec.Variables;
  * The conveniences a shell test reaches for beyond running a command: HTTP requests against the
  * program under test, and the tail of a log file.
  *
- * <p>Knows nothing of what the program is. A project extends this with the helpers that do — a
- * collection, a config, a graceful shutdown — and the session hands back whichever it was given.
+ * <p>Knows nothing of what the program is. A project extends this with the helpers that do — its
+ * own resources, its administrative endpoints, a graceful shutdown — and the session hands back
+ * whichever it was given.
  *
  * <p>Reached through the session that owns it, or directly as inherited shorthands on a test case.
  */
