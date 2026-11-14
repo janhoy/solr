@@ -17,6 +17,8 @@
 
 package org.apache.solr.cats.session;
 
+import static org.apache.solr.cats.EnabledOnShell.BASH;
+import static org.apache.solr.cats.EnabledOnShell.CMD;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -165,7 +167,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash") // Reading the environment back needs the shell's own spelling.
+  @EnabledOnShell(BASH) // Reading the environment back needs the shell's own spelling.
   public void envReachesTheShell() {
     session.env("MARKER", "hello world");
     session.allowShellSpecific();
@@ -233,7 +235,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash") // Single quotes are bash's; cmd.exe treats them as ordinary characters.
+  @EnabledOnShell(BASH) // Single quotes are bash's; cmd.exe treats them as ordinary characters.
   public void aHarnessResolvedVariableIsNotLeftForTheShell() {
     // The proof that it is the harness and not bash doing the work: the resolved value reaches the
     // command even inside single quotes, where bash would never have expanded anything.
@@ -281,7 +283,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash") // About bash's brace expansion specifically.
+  @EnabledOnShell(BASH) // About bash's brace expansion specifically.
   public void bashLeavesDoubleBracesAlone() {
     // Guards the choice of delimiter. 'not-a-var' is not a legal placeholder name, so the harness
     // passes it through untouched and bash gets to see it — unquoted, with brace expansion live.
@@ -290,7 +292,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash") // 'pwd' is the shell's own; the harness offers cwd() instead.
+  @EnabledOnShell(BASH) // 'pwd' is the shell's own; the harness offers cwd() instead.
   public void cdChangesTheWorkingDirectory() throws IOException {
     // Compared as strings: the temporary directory may be reached through a symlink, while the
     // session resolves against its own cwd and produces a real path.
@@ -307,7 +309,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash") // 'exit' is spelled 'exit /b' on cmd.exe.
+  @EnabledOnShell(BASH) // 'exit' is spelled 'exit /b' on cmd.exe.
   public void exitStatusIsReported() {
     session.allowShellSpecific();
     session.tryRun("exit 3").assertExitCode(3);
@@ -315,7 +317,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash") // Writing to stderr at all needs the shell's own redirection syntax.
+  @EnabledOnShell(BASH) // Writing to stderr at all needs the shell's own redirection syntax.
   public void stderrIsMergedByDefault() {
     session.allowShellSpecific();
     session.run("echo out; echo err 1>&2").assertContains("out").assertContains("err");
@@ -330,7 +332,7 @@ public class CliSessionTest {
 
   // cmd.exe's echo prints the quotes that quoting adds, so the expected output differs.
   @Test
-  @EnabledOnShell("bash")
+  @EnabledOnShell(BASH)
   public void argvFormQuotesArgumentsForTheShell() {
     session.run(List.of("echo", "a b", "c&d", "e|f", "g'h")).assertExact("a b c&d e|f g'h");
   }
@@ -356,7 +358,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash") // 'sleep' is the shell's own; the harness offers awaitOrFail().
+  @EnabledOnShell(BASH) // 'sleep' is the shell's own; the harness offers awaitOrFail().
   public void aCommandThatNeverEndsFailsOnItsTimeout() {
     session.timeout(Duration.ofSeconds(2));
     session.allowShellSpecific();
@@ -366,7 +368,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash") // Prompting for input needs the shell's own 'read'.
+  @EnabledOnShell(BASH) // Prompting for input needs the shell's own 'read'.
   public void stdinIsClosedSoAPromptCannotHang() {
     // Redirecting stdin from the null device is what stops an interactive command blocking the
     // build: the prompt sees EOF at once. What matters is that the command returns at all, not
@@ -383,14 +385,14 @@ public class CliSessionTest {
   // one line is the same on both shells.
 
   @Test
-  @EnabledOnShell("bash")
+  @EnabledOnShell(BASH)
   public void stdinCarriesTextThroughUntouched() {
     session.allowShellSpecific();
     session.runWithStdin("plain text\n", "cat").assertExact("plain text");
   }
 
   @Test
-  @EnabledOnShell("bash")
+  @EnabledOnShell(BASH)
   public void stdinCarriesSeveralLines() {
     session.allowShellSpecific();
     session
@@ -401,7 +403,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash")
+  @EnabledOnShell(BASH)
   public void stdinCarriesQuotesNoShellWouldPassAsAnArgument() {
     session.allowShellSpecific();
     // Both quote characters at once, which cmd.exe cannot carry as an argument at all, plus the %
@@ -411,14 +413,14 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash")
+  @EnabledOnShell(BASH)
   public void stdinCarriesNonAsciiAsUtf8() {
     session.allowShellSpecific();
     session.runWithStdin("blåbær ☃\n", "cat").assertExact("blåbær ☃");
   }
 
   @Test
-  @EnabledOnShell("bash")
+  @EnabledOnShell(BASH)
   public void stdinIsRecordedInTheTranscript() {
     session.allowShellSpecific();
     session.runWithStdin("recorded\n", "cat");
@@ -460,7 +462,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash") // 'exit' is spelled 'exit /b' on cmd.exe.
+  @EnabledOnShell(BASH) // 'exit' is spelled 'exit /b' on cmd.exe.
   public void aFailingExitStatusIsReportedPlainly() {
     session.allowShellSpecific();
     AssertionError failure =
@@ -471,7 +473,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("bash") // printf is the portable way to emit a specific invalid byte.
+  @EnabledOnShell(BASH) // printf is the portable way to emit a specific invalid byte.
   public void outputThatIsNotValidUtf8DoesNotFailTheCommand() {
     // Found on Windows, where a launcher's .cmd output comes back in the console code page: strict
     // decoding turned a passing command into a MalformedInputException. Nothing guarantees a
@@ -664,7 +666,7 @@ public class CliSessionTest {
   // ---------------------------------------------------------------- cmd.exe specifics
 
   @Test
-  @EnabledOnShell("cmd")
+  @EnabledOnShell(CMD)
   public void cmdQuotingProtectsMetacharacters() {
     // Characters cmd's parser would otherwise act on, passed as argv so the harness quotes each.
     // Checked with contains rather than equals because cmd's echo prints the quotes that quoting
@@ -677,7 +679,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("cmd")
+  @EnabledOnShell(CMD)
   public void cmdQuotingRefusesACaret() {
     // 'call' re-parses its line, which doubles a caret: "a^b" arrives as "a^^b". Refused rather
     // than silently mangled, the same treatment an embedded double quote gets.
@@ -688,7 +690,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("cmd")
+  @EnabledOnShell(CMD)
   public void cmdQuotingEscapesPercentForBatchFiles() {
     // % is expanded even inside double quotes, and a literal one in a batch file is written %%.
     // A URL carrying an escape like %20 is the case that matters.
@@ -696,7 +698,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("cmd")
+  @EnabledOnShell(CMD)
   public void cmdQuotingRefusesAnEmbeddedDoubleQuote() {
     // Refused rather than mangled: cmd has no escape that survives both its own quote counting
     // and the target program's parser.
@@ -707,7 +709,7 @@ public class CliSessionTest {
   }
 
   @Test
-  @EnabledOnShell("cmd")
+  @EnabledOnShell(CMD)
   public void cmdEnvironmentIsCaseInsensitive() {
     // Windows environment names are case-insensitive, so the harness keeps its env map that way.
     session.env("MiXeD_Case_Var", "value");
@@ -763,7 +765,7 @@ public class CliSessionTest {
   // ------------------------------------------------------- output extraction
 
   @Test
-  @EnabledOnShell("bash") // Emitting three fixed lines needs the shell's own 'printf'.
+  @EnabledOnShell(BASH) // Emitting three fixed lines needs the shell's own 'printf'.
   public void outputExtractionReplacesTheUnixTextTools() {
     session.allowShellSpecific();
     var result = session.run("printf 'alpha 1\\nbeta 2\\ngamma 3\\n'");

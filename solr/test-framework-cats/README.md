@@ -23,7 +23,7 @@ The dependency set is deliberately thin: a JRE, JUnit 4, and `slf4j-api` for log
 
 ## What it gives you
 
-**One test source, both shells.** The same test class drives the program under `bash` and under `cmd.exe`. A command line is written once, in a single portable spelling, and the shell in use decides how it is quoted and invoked. Where the two genuinely differ, a test says so with `@EnabledOnShell("bash")` and is skipped elsewhere as an assumption failure rather than failing.
+**One test source, both shells.** The same test class drives the program under `bash` and under `cmd.exe`. A command line is written once, in a single portable spelling, and the shell in use decides how it is quoted and invoked. Where the two genuinely differ, a test says so with `@EnabledOnShell(BASH)` and is skipped elsewhere as an assumption failure rather than failing.
 
 **Variable resolution before any shell sees the line.** `${NAME}`, `$NAME` and `{{NAME}}` all name an environment variable, and the harness substitutes them itself — in a command line and in an assertion's expected text alike, so the two cannot drift apart. An undefined name is an immediate `AssertionError` listing the names that are defined, instead of the empty string a shell would quietly splice in. `%NAME%` is rejected: a line written that way would pass on one shell and fail on the other.
 
@@ -51,7 +51,7 @@ A line whose command is one of these is rejected, because `cmd.exe` has no equiv
 | `ps`, `pgrep`, `kill`, `pkill`, `lsof` | the harness tracks and stops what a test started |
 | `pwd`, `basename`, `dirname`, `realpath` | `cwd()`, `path(p)` and `java.nio.file.Path` |
 | `export`, `unset` | `env(name, value)`, `unset(name)` |
-| `chmod`, `chown`, `ln`, `openssl`, `tar`, `unzip`, `which` | do it in Java, or mark the test `@EnabledOnShell("bash")` |
+| `chmod`, `chown`, `ln`, `openssl`, `tar`, `unzip`, `which` | do it in Java, or mark the test `@EnabledOnShell(BASH)` |
 
 ### Unportable operators
 
@@ -319,7 +319,7 @@ public final class PowerShell implements Shell {
 Shells.register(new PowerShell());
 ```
 
-`quoteForDisplay(arg)` and `joinArgs(argv)` have defaults worth overriding only if the display quoting is misleading for that shell. `@EnabledOnShell` takes ids, so a test for the new shell says `@EnabledOnShell("powershell")`, and `CATS_SHELL=powershell` runs the suite through it. The quoting rules are the whole job, and they belong with the project that needs that shell.
+`quoteForDisplay(arg)` and `joinArgs(argv)` have defaults worth overriding only if the display quoting is misleading for that shell. `@EnabledOnShell` takes ids, so a test for the new shell says `@EnabledOnShell` with its id, and `CATS_SHELL=powershell` runs the suite through it. The quoting rules are the whole job, and they belong with the project that needs that shell.
 
 ## Running the module's own tests
 
