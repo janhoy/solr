@@ -30,6 +30,23 @@ import org.apache.solr.cats.env.PortLayout;
  * gets shells, transcripts, variable resolution and the portability rails. A long-running server
  * opts in to the parts it needs: where its launcher lives, which ports it listens on, how to find
  * the processes a test started, and how to stop one.
+ *
+ * <p><b>Exactly one program per {@link org.apache.solr.cats.env.CatsHarnessEnv}.</b> Everything
+ * here is asked by the lifecycle and never per command: {@link #launcherDir} when {@code PATH} is
+ * assembled, {@link #portLayout} when the class claims its block, {@link #running}, {@link
+ * #stopCommand} and {@link #staleStateFiles} in the leak checks and the teardown, {@link #traits}
+ * once. A command is a line in a shell whose environment was fixed when the session was built, so
+ * "which program does {@code run()} pick" is a question that cannot arise. A program that is both a
+ * server and its own client CLI is still one program: one installation, one launcher directory, one
+ * layout.
+ *
+ * <p>A fixture is not a program under test and needs none of this: a container the test starts, a
+ * web root served to the program — nothing about them is discovered, stopped or port-allocated by
+ * the harness.
+ *
+ * <p>Two programs genuinely under test are two {@link
+ * org.apache.solr.cats.session.CatsSessionRule}s in one test class, which is where that shape is
+ * described.
  */
 public interface ProgramUnderTest {
 

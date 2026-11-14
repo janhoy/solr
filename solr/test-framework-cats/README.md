@@ -189,6 +189,50 @@ A subclass may also override `installDirVariable()`, `requiresInstallDir()` and 
 
 The two halves meet in `CatsSessionRule`, which resolves the environment per class, wipes the work directory, runs the leak checks, opens a class-scoped session and a child session per test, and snapshots the named directories plus `transcript.log` when a test fails. `CatsTestCase` is itself nothing but that wiring, and is worth reading as the template for a project's own base class.
 
+## One program per environment
+
+**Exactly one `ProgramUnderTest` per `CatsHarnessEnv`.** The program is consulted by the lifecycle and never per command: `launcherDir` when `PATH` is assembled, `portLayout` when the class claims its block, `running` / `stopCommand` / `staleStateFiles` in the leak checks and the teardown, `traits` once. A `run()` is a line in a shell whose environment was fixed when the session was built, so "which program does `run()` pick" is a question that cannot arise. A program that is both a server and its own client CLI is still one program: one installation, one launcher directory, one layout.
+
+A fixture is not a program under test, and needs no `ProgramUnderTest`: a container the test starts, a web root served to the program with `serveHttp` — nothing about them is discovered, stopped or port-allocated by the harness, so there is nothing for a program to declare.
+
+When two programs genuinely are under test, the shape is JUnit's — two rules in one class, each with its own environment, program, port block, work directory, marker and leak check:
+
+```java
+public class TwoProgramsTest implements CatsDsl {
+
+  @ClassRule public static final CatsSessionRule<MytoolEnv> mytool =
+      new CatsSessionRule<>(MytoolEnv::new, new MytoolServer(), List.of(MytoolEnv::workDir));
+
+  @ClassRule public static final CatsSessionRule<OthertoolEnv> othertool =
+      new CatsSessionRule<>(OthertoolEnv::new, new OthertoolServer(), List.of(OthertoolEnv::workDir));
+
+  private CliSession mytoolCli;
+  private CliSession othertoolCli;
+
+  @Rule public final TestRule mytoolSession =
+      (base, d) -> mytool.apply(base, d, session -> mytoolCli = session);
+
+  @Rule public final TestRule othertoolSession =
+      (base, d) -> othertool.apply(base, d, session -> othertoolCli = session);
+
+  /** Which of the two the bare vocabulary speaks to. */
+  @Override
+  public CliSession cli() {
+    return mytoolCli;
+  }
+
+  @Test
+  public void mytoolReadsWhatOthertoolWrote() {
+    othertoolCli.run("othertool put --port " + othertool.env().ports().at(0) + " k=v");
+    run("mytool get --from http://localhost:" + othertool.env().ports().at(0) + "/k").assertExact("v");
+  }
+}
+```
+
+The bare `run()`, `ports()` and the rest go to the session `cli()` returns; the other program is addressed explicitly, through its own session and its own environment. Two programs cost two port blocks and two work directories, which is what they should cost, and their launcher directories never share one `PATH` — both shipping a `bin/start` is not hypothetical, and a command meant for one program does not silently resolve against the other.
+
+What is deliberately absent: a composite program, and picking a program per command. The second would suggest the program matters per spawn, which it does not.
+
 ## Run settings
 
 The harness' own settings are read from the environment first, then from the system property the name maps to — `CATS_OUTPUT_DIR` is also `-Dcats.output.dir`. The environment is how a build task supplies a value; the property is how a developer running one class from an IDE overrides it.

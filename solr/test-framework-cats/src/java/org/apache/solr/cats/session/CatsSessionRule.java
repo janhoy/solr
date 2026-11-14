@@ -67,6 +67,18 @@ import org.slf4j.LoggerFactory;
  * none gets the session, the transcript and the work directory, and the checks that do not apply
  * are skipped.
  *
+ * <p>One rule drives exactly one {@link ProgramUnderTest}, through exactly one {@link
+ * CatsHarnessEnv}: the program is consulted by the lifecycle here and never per command. A fixture
+ * — a container, a served web root — is not a program under test and needs no rule of its own.
+ *
+ * <p>Two programs genuinely under test are two rules in one test class, each with its own
+ * environment, program, port block, work directory, marker and leak check. The vocabulary's bare
+ * {@code run()} is bound to the session the test case returns from {@code cli()}, and the other
+ * program is addressed explicitly through its own rule ({@code other.session().run(...)}, {@code
+ * other.env().ports().at(0)}). Two programs cost two port blocks and two work directories, which is
+ * what they should cost, and their launcher directories never share one {@code PATH} — both
+ * shipping a {@code bin/start} is not hypothetical.
+ *
  * @param <E> the environment this project resolves, so a base class can hand its own type back
  */
 public final class CatsSessionRule<E extends CatsHarnessEnv> implements TestRule {
