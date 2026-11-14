@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell.session;
+package org.apache.solr.cats.session;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -57,9 +57,6 @@ import org.apache.solr.cats.exec.ShellAssertionError;
 import org.apache.solr.cats.exec.ShellExecutor;
 import org.apache.solr.cats.exec.Shells;
 import org.apache.solr.cats.exec.Variables;
-import org.apache.solr.cats.session.CatsCliHelpers;
-import org.apache.solr.cats.session.CatsNet;
-import org.apache.solr.cats.session.Transcript;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1021,7 +1018,7 @@ public class CliSession implements AutoCloseable {
       }
     }
 
-    // Graceful stop first, so Solr gets to shut down cleanly and remove its own pid file.
+    // Graceful stop first, so the program gets to shut down cleanly and remove its own pid file.
     for (Map.Entry<Integer, Long> node : ownedNodes.entrySet()) {
       int port = node.getKey();
       Optional<String> stop = program.stopCommand(port);
@@ -1034,7 +1031,7 @@ public class CliSession implements AutoCloseable {
           log.warn("'{}' exited {}", stop.get(), result.status());
         }
       } catch (RuntimeException | AssertionError e) {
-        problems.add("stopping Solr on port " + port + ": " + e);
+        problems.add("stopping the program on port " + port + ": " + e);
       }
     }
 
@@ -1042,9 +1039,9 @@ public class CliSession implements AutoCloseable {
     for (Map.Entry<Integer, Long> node : ownedNodes.entrySet()) {
       long pid = node.getValue();
       if (ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) {
-        log.warn("Solr pid {} (port {}) still alive after stop; killing", pid, node.getKey());
+        log.warn("pid {} (port {}) still alive after stop; killing", pid, node.getKey());
         if (!ProcessKill.killTree(pid, Duration.ofSeconds(10))) {
-          problems.add("could not kill Solr pid " + pid + " on port " + node.getKey());
+          problems.add("could not kill pid " + pid + " on port " + node.getKey());
         }
       }
       registry.forget(node.getKey(), pid);

@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.solr.shell;
+package org.apache.solr.cats.session;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -25,47 +30,60 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import org.apache.solr.SolrTestCase;
 import org.apache.solr.cats.EnabledOnShell;
 import org.apache.solr.cats.ShellGate;
+import org.apache.solr.cats.env.CatsHarnessEnv;
+import org.apache.solr.cats.env.PortBlock;
+import org.apache.solr.cats.env.PortLayout;
+import org.apache.solr.cats.exec.CatsFiles;
 import org.apache.solr.cats.exec.ProgramUnderTest;
 import org.apache.solr.cats.exec.RunningProgram;
 import org.apache.solr.cats.exec.Shells;
-import org.apache.solr.cats.session.CatsCliHelpers;
-import org.apache.solr.shell.env.SolrCatsHarnessEnv;
-import org.apache.solr.shell.session.CliSession;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
 
 /**
  * Unit tests for the harness itself — {@code env}, {@code cd}, {@code run}, {@code runWithStdin},
- * variable resolution, quoting, timeouts — with no Solr involved.
+ * variable resolution, quoting, timeouts — with no program under test involved.
  *
- * <p>Deliberately uses only shell built-ins, so it needs no unpacked distribution and runs in a
- * couple of seconds. It runs on whichever shell the platform uses, which is how the {@code
- * Shells.CMD} half of the harness gets covered at all; the handful of cases that really are one
- * shell's carry {@link EnabledOnShell}. The suites that actually drive {@code bin/solr} live in
- * {@code solr/packaging} and extend {@link SolrShellTestCase}.
+ * <p>Deliberately uses only shell built-ins, so it needs nothing installed and runs in a couple of
+ * seconds. It runs on whichever shell the platform uses, which is how the {@code Shells.CMD} half
+ * of the harness gets covered at all; the handful of cases that really are one shell's carry {@link
+ * EnabledOnShell}.
  */
-public class CliSessionTest extends SolrTestCase {
+public class CliSessionTest {
 
-  /** Makes {@link EnabledOnShell} effective without needing a Solr distribution. */
+  /** Makes {@link EnabledOnShell} effective. */
   @Rule public final ShellGate shellGate = new ShellGate();
 
-  private SolrCatsHarnessEnv env;
+  @Rule public final TestName testName = new TestName();
+
+  private Path tmp;
+  private TestEnv env;
   private CliSession session;
 
   /**
-   * A program with nothing overridden but discovery, which the ownership cases script. Everything
-   * else here needs no program at all, which is the point of every method having a default.
+   * A program with nothing overridden but its ports and discovery, which the ownership cases
+   * script. Everything else here needs no program at all, which is the point of every method having
+   * a default.
    */
   private final ScriptedProgram program = new ScriptedProgram();
 
+  private static final PortLayout LAYOUT =
+      new PortLayout(4, new int[] {0, 1, 2, 1000}, 20_000, 30_000, 200, 0);
+
   private static final class ScriptedProgram implements ProgramUnderTest {
     private List<RunningProgram> running = List.of();
+
+    @Override
+    public PortLayout portLayout() {
+      return LAYOUT;
+    }
 
     @Override
     public List<RunningProgram> running(String marker) {
@@ -73,20 +91,53 @@ public class CliSessionTest extends SolrTestCase {
     }
   }
 
+  /** The least a project has to supply: the variables its program reads. */
+  private static final class TestEnv extends CatsHarnessEnv {
+
+    TestEnv(ProgramUnderTest program, Path installDir, Path outputDir) {
+      super(program, null, installDir, outputDir);
+    }
+
+    @Override
+    protected void assemble(
+        Map<String, String> vars,
+        Optional<Path> installDir,
+        Path classDir,
+        PortBlock ports,
+        String marker) {
+      vars.put("SOLR_HOME", createDir(classDir.resolve("home"), "SOLR_HOME").toString());
+      vars.put("SOLR_PORT", Integer.toString(ports.at(0)));
+      vars.put("SOLR2_PORT", Integer.toString(ports.at(1)));
+      vars.put("SOLR3_PORT", Integer.toString(ports.at(2)));
+      vars.put("ZK_PORT", Integer.toString(ports.at(3)));
+    }
+
+    @Override
+    public Path workDir() {
+      return Path.of(vars().get("SOLR_HOME"));
+    }
+
+    @Override
+    public Set<String> echoedPrefixes() {
+      return Set.of("SOLR", "ZK_", "TEST_");
+    }
+  }
+
   @Before
   public void openSession() throws IOException {
-    // SolrCatsHarnessEnv only asks that SOLR_TIP contain a bin directory; nothing here runs
-    // bin/solr.
-    Path fakeTip = createTempDir("tip");
-    Files.createDirectories(fakeTip.resolve("bin"));
-    env = SolrCatsHarnessEnv.of(fakeTip, createTempDir("out"));
-    session = CliSession.forScope(env, program, getTestName());
+    tmp = Files.createTempDirectory("cats-session-test");
+    Path installDir = Files.createDirectories(tmp.resolve("install").resolve("bin")).getParent();
+    env = new TestEnv(program, installDir, Files.createDirectory(tmp.resolve("out")));
+    session = CliSession.forScope(env, program, testName.getMethodName());
   }
 
   @After
-  public void closeSession() {
+  public void closeSession() throws IOException {
     if (session != null) {
       session.close();
+    }
+    if (tmp != null) {
+      CatsFiles.rm(tmp);
     }
   }
 
@@ -115,14 +166,14 @@ public class CliSessionTest extends SolrTestCase {
 
   @Test
   public void harnessVariablesArePresent() {
-    session.run("echo ${SOLR_HOME}").assertExitCode(0).assertExact(env.solrHome().toString());
+    session.run("echo ${SOLR_HOME}").assertExitCode(0).assertExact(env.workDir().toString());
   }
 
   @Test
   public void runResolvesEveryVariableSpelling() {
     // All three mean "the environment variable", resolved by the harness before any shell sees it.
     // ${NAME} is the one BATS uses, so a ported line needs no edit.
-    String zk = String.valueOf(env.ports().zk());
+    String zk = String.valueOf(env.ports().at(3));
     session.run("echo ${ZK_PORT}").assertExact(zk);
     session.run("echo $ZK_PORT").assertExact(zk);
     session.run("echo {{ZK_PORT}}").assertExact(zk);
@@ -140,7 +191,7 @@ public class CliSessionTest extends SolrTestCase {
   @Test
   public void anUnknownVariableInAnAssertionFailsToo() {
     AssertionError failure =
-        expectThrows(
+        assertThrows(
             AssertionError.class, () -> session.run("echo hi").assertContains("${NO_SUCH_VAR}"));
     assertTrue(failure.getMessage(), failure.getMessage().contains("Unknown variable"));
     assertTrue(failure.getMessage(), failure.getMessage().contains("an assertion"));
@@ -154,7 +205,7 @@ public class CliSessionTest extends SolrTestCase {
 
   @Test
   public void runResolvesVariablesInTheArgvForm() {
-    session.run(List.of("echo", "${ZK_PORT}")).assertExact(String.valueOf(env.ports().zk()));
+    session.run(List.of("echo", "${ZK_PORT}")).assertExact(String.valueOf(env.ports().at(3)));
   }
 
   @Test
@@ -165,14 +216,14 @@ public class CliSessionTest extends SolrTestCase {
     session
         .allowShellSpecific()
         .run("echo '${ZK_PORT}'")
-        .assertExact(String.valueOf(env.ports().zk()));
+        .assertExact(String.valueOf(env.ports().at(3)));
   }
 
   @Test
   public void unknownVariableFailsRatherThanExpandingToNothing() {
     for (String spelling : List.of("${NO_SUCH_VAR}", "$NO_SUCH_VAR", "{{NO_SUCH_VAR}}")) {
       AssertionError failure =
-          expectThrows(AssertionError.class, () -> session.run("echo " + spelling));
+          assertThrows(AssertionError.class, () -> session.run("echo " + spelling));
       assertTrue(failure.getMessage(), failure.getMessage().contains("Unknown variable"));
       assertTrue(failure.getMessage(), failure.getMessage().contains("NO_SUCH_VAR"));
     }
@@ -183,7 +234,7 @@ public class CliSessionTest extends SolrTestCase {
     // %NAME% cannot be substituted (% is String.format's), and leaving it alone would make a line
     // that works on Windows and fails on bash. So it is refused, pointing at ${NAME}.
     AssertionError failure =
-        expectThrows(AssertionError.class, () -> session.run("echo %SOLR2_PORT%"));
+        assertThrows(AssertionError.class, () -> session.run("echo %SOLR2_PORT%"));
     assertTrue(failure.getMessage(), failure.getMessage().contains("cmd.exe-only variable"));
     assertTrue(failure.getMessage(), failure.getMessage().contains("${SOLR2_PORT}"));
   }
@@ -192,7 +243,7 @@ public class CliSessionTest extends SolrTestCase {
   public void aJavaValueIsConcatenated() {
     // The recommended way to get a Java-side value into a command: no format placeholder, no
     // binding, and it reads as the command it is.
-    session.run("echo prefix-" + env.ports().zk()).assertExact("prefix-" + env.ports().zk());
+    session.run("echo prefix-" + env.ports().at(3)).assertExact("prefix-" + env.ports().at(3));
   }
 
   @Test
@@ -201,7 +252,7 @@ public class CliSessionTest extends SolrTestCase {
     // Java value that itself contains ${...} is read as a variable reference rather than text.
     String awkward = "${NO_SUCH_VAR}";
     AssertionError failure =
-        expectThrows(AssertionError.class, () -> session.run("echo " + awkward));
+        assertThrows(AssertionError.class, () -> session.run("echo " + awkward));
     assertTrue(failure.getMessage(), failure.getMessage().contains("Unknown variable"));
   }
 
@@ -217,9 +268,9 @@ public class CliSessionTest extends SolrTestCase {
   @Test
   @EnabledOnShell("bash") // 'pwd' is the shell's own; the harness offers cwd() instead.
   public void cdChangesTheWorkingDirectory() throws IOException {
-    // Compared as strings: createTempDir hands back a Lucene FilterPath, while the session
-    // resolves against its own cwd and produces a plain filesystem Path.
-    Path target = createTempDir("elsewhere").toRealPath();
+    // Compared as strings: the temporary directory may be reached through a symlink, while the
+    // session resolves against its own cwd and produces a real path.
+    Path target = Files.createDirectory(tmp.resolve("elsewhere")).toRealPath();
     session.cd(target);
     assertEquals(target.toString(), session.cwd().toString());
     session.allowShellSpecific();
@@ -228,7 +279,7 @@ public class CliSessionTest extends SolrTestCase {
 
   @Test
   public void cdRejectsAPathThatIsNotADirectory() {
-    expectThrows(AssertionError.class, () -> session.cd("no-such-directory"));
+    assertThrows(AssertionError.class, () -> session.cd("no-such-directory"));
   }
 
   @Test
@@ -249,7 +300,7 @@ public class CliSessionTest extends SolrTestCase {
   @Test
   public void stdoutAndStderrAreSeparableOnRequest() {
     var separated = session.runSeparated("echo ${ZK_PORT}");
-    assertEquals(String.valueOf(env.ports().zk()), separated.stdout());
+    assertEquals(String.valueOf(env.ports().at(3)), separated.stdout());
     assertEquals("", separated.stderr());
   }
 
@@ -285,7 +336,7 @@ public class CliSessionTest extends SolrTestCase {
   public void aCommandThatNeverEndsFailsOnItsTimeout() {
     session.timeout(Duration.ofSeconds(2));
     session.allowShellSpecific();
-    AssertionError failure = expectThrows(AssertionError.class, () -> session.run("sleep 60"));
+    AssertionError failure = assertThrows(AssertionError.class, () -> session.run("sleep 60"));
     assertTrue(failure.getMessage(), failure.getMessage().contains("did not finish within 2s"));
     assertTrue(session.lastResult().timedOut());
   }
@@ -367,7 +418,7 @@ public class CliSessionTest extends SolrTestCase {
   public void aFailureReportsEveryCommandAndCarriesNoStackTrace() {
     session.run("echo earlier-command");
     AssertionError failure =
-        expectThrows(
+        assertThrows(
             AssertionError.class, () -> session.run("echo haystack").assertContains("needle"));
     String message = failure.getMessage();
 
@@ -389,7 +440,7 @@ public class CliSessionTest extends SolrTestCase {
   public void aFailingExitStatusIsReportedPlainly() {
     session.allowShellSpecific();
     AssertionError failure =
-        expectThrows(AssertionError.class, () -> session.tryRun("exit 3").assertExitCode(0));
+        assertThrows(AssertionError.class, () -> session.tryRun("exit 3").assertExitCode(0));
     assertTrue(
         failure.getMessage(),
         failure.getMessage().contains("FAILED: command exited 3, expected 0"));
@@ -411,7 +462,7 @@ public class CliSessionTest extends SolrTestCase {
 
   @Test
   public void aNodeIsOwnedByTheSessionThatStartedIt() {
-    int port = env.ports().solr2();
+    int port = env.ports().at(1);
     CliSession child = session.child("starter");
     try {
       program.running = List.of(new RunningProgram(90_000_001L, port));
@@ -427,7 +478,7 @@ public class CliSessionTest extends SolrTestCase {
   public void aRestartedNodeStaysOwnedByTheAncestorSession() {
     // Otherwise a test that restarts the node its class started would take ownership of it, and
     // stop it when that one test ended — tearing down the node every later test still expects.
-    int port = env.ports().solr();
+    int port = env.ports().at(0);
     program.running = List.of(new RunningProgram(90_000_002L, port));
     session.run("echo started");
     assertEquals(Set.of(port), session.ownedPorts());
@@ -447,7 +498,7 @@ public class CliSessionTest extends SolrTestCase {
   public void aNodeOutsideThisClassesPortBlockIsNobodysBusiness() {
     // The record of running nodes is shared with every other class on the cmd side, so the block
     // is what tells this class's nodes from a sibling's.
-    program.running = List.of(new RunningProgram(90_000_004L, env.ports().solr() + 500));
+    program.running = List.of(new RunningProgram(90_000_004L, env.ports().at(0) + 500));
     session.run("echo elsewhere");
     assertEquals(Set.of(), session.ownedPorts());
   }
@@ -473,7 +524,7 @@ public class CliSessionTest extends SolrTestCase {
     // 'call' re-parses its line, which doubles a caret: "a^b" arrives as "a^^b". Refused rather
     // than silently mangled, the same treatment an embedded double quote gets.
     UnsupportedOperationException e =
-        expectThrows(
+        assertThrows(
             UnsupportedOperationException.class, () -> session.run(List.of("echo", "a^b")));
     assertTrue(e.getMessage(), e.getMessage().contains("standard input"));
   }
@@ -492,7 +543,7 @@ public class CliSessionTest extends SolrTestCase {
     // Refused rather than mangled: cmd has no escape that survives both its own quote counting
     // and the target program's parser.
     UnsupportedOperationException e =
-        expectThrows(
+        assertThrows(
             UnsupportedOperationException.class, () -> session.run(List.of("echo", "a\"b")));
     assertTrue(e.getMessage(), e.getMessage().contains("standard input"));
   }
@@ -510,36 +561,36 @@ public class CliSessionTest extends SolrTestCase {
   @Test
   public void aPipeIsRejectedWithTheAlternative() {
     AssertionError failure =
-        expectThrows(AssertionError.class, () -> session.run("echo hello | grep hello"));
+        assertThrows(AssertionError.class, () -> session.run("echo hello | grep hello"));
     assertTrue(failure.getMessage(), failure.getMessage().contains("a pipe (|) is not portable"));
   }
 
   @Test
   public void aUnixOnlyToolIsRejectedWithTheAlternative() {
     AssertionError failure =
-        expectThrows(AssertionError.class, () -> session.run("grep -c solr somefile.txt"));
+        assertThrows(AssertionError.class, () -> session.run("grep -c solr somefile.txt"));
     assertTrue(failure.getMessage(), failure.getMessage().contains("linesMatching()"));
     // And the same mistake spelled with a path.
-    expectThrows(AssertionError.class, () -> session.run("/usr/bin/awk {print} f"));
+    assertThrows(AssertionError.class, () -> session.run("/usr/bin/awk {print} f"));
     // Also in the argv form, where only the tool name can be judged.
-    expectThrows(AssertionError.class, () -> session.run(List.of("sed", "s/a/b/", "f")));
+    assertThrows(AssertionError.class, () -> session.run(List.of("sed", "s/a/b/", "f")));
   }
 
   @Test
   public void chainedCommandsAndSubstitutionsAreRejected() {
-    expectThrows(AssertionError.class, () -> session.run("echo a && echo b"));
-    expectThrows(AssertionError.class, () -> session.run("echo a ; echo b"));
-    expectThrows(AssertionError.class, () -> session.run("echo $(date)"));
-    expectThrows(AssertionError.class, () -> session.run("echo > /dev/null"));
+    assertThrows(AssertionError.class, () -> session.run("echo a && echo b"));
+    assertThrows(AssertionError.class, () -> session.run("echo a ; echo b"));
+    assertThrows(AssertionError.class, () -> session.run("echo $(date)"));
+    assertThrows(AssertionError.class, () -> session.run("echo > /dev/null"));
     AssertionError assignment =
-        expectThrows(AssertionError.class, () -> session.run("SOLR_LOG_LEVEL=DEBUG echo hi"));
+        assertThrows(AssertionError.class, () -> session.run("SOLR_LOG_LEVEL=DEBUG echo hi"));
     assertTrue(assignment.getMessage(), assignment.getMessage().contains("env(\"SOLR_LOG_LEVEL\""));
   }
 
   @Test
   public void singleQuotesAreRejectedBecauseCmdHasNoSuchQuoting() {
     AssertionError failure =
-        expectThrows(AssertionError.class, () -> session.run("echo 'hello world'"));
+        assertThrows(AssertionError.class, () -> session.run("echo 'hello world'"));
     assertTrue(failure.getMessage(), failure.getMessage().contains("single-quote quoting"));
   }
 
@@ -620,8 +671,8 @@ public class CliSessionTest extends SolrTestCase {
         .assertMatches("<html")
         // The versioned-asset shape the admin UI must not emit: a digest before the extension.
         .assertNotMatches("(src|href)=\"[^\"]+\\.[0-9a-f]{8}\\.(js|css)\"");
-    expectThrows(AssertionError.class, () -> result.assertHeaderContains("X-Frame-Options"));
-    expectThrows(
+    assertThrows(AssertionError.class, () -> result.assertHeaderContains("X-Frame-Options"));
+    assertThrows(
         AssertionError.class, () -> result.assertNotMatches("(src|href)=\"[^\"]+\\.(js|css)\""));
   }
 
@@ -678,7 +729,7 @@ public class CliSessionTest extends SolrTestCase {
   public void aDownloadThatCannotConnectFailsLoudlyRatherThanLeavingATruncatedFile() {
     // Port of 'curl -o <file> <url>'. Nothing is listening on this session's block.
     String url = "http://localhost:" + session.ports().at(0) + "/model.onnx";
-    expectThrows(UncheckedIOException.class, () -> session.download(url, "model.onnx"));
+    assertThrows(UncheckedIOException.class, () -> session.download(url, "model.onnx"));
   }
 
   // ------------------------------------------------------- a local web server
@@ -710,7 +761,7 @@ public class CliSessionTest extends SolrTestCase {
   public void serveHttpRefusesSomethingThatIsNotADirectory() {
     session.write("afile.txt", "x");
     AssertionError failure =
-        expectThrows(AssertionError.class, () -> session.serveHttp("afile.txt"));
+        assertThrows(AssertionError.class, () -> session.serveHttp("afile.txt"));
     assertTrue(failure.getMessage(), failure.getMessage().contains("not a directory"));
   }
 

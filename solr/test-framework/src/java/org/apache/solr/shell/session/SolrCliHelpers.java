@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.util.List;
 import org.apache.solr.cats.exec.CommandResult;
 import org.apache.solr.cats.session.CatsCliHelpers;
+import org.apache.solr.cats.session.CliSession;
 
 /**
  * The Solr-aware conveniences a shell test reaches for, ported from {@code bats_helper.bash}:

@@ -19,7 +19,23 @@ apply plugin: 'java-library'
 
 description = 'CATS Test Framework - a generic harness for driving a CLI through the platform shell'
 
+ext {
+  // The harness spawns real shell processes, which the test security policy forbids: it grants
+  // 'execute' only for java itself.
+  useSecurityManager = false
+}
+
 dependencies {
   api libs.junit.junit
   implementation libs.slf4j.api
+}
+
+// The harness' own unit tests are the stock 'test' task, and so part of 'check': they need nothing
+// installed and run in seconds, so a harness regression is caught without the slow CLI suites.
+// 'catsTests' is the name the CI workflow and the CATS suites in solr/packaging share, so that
+// './gradlew catsTests' from the root runs both.
+tasks.register('catsTests') {
+  group = 'verification'
+  description = 'Unit tests for the CATS harness itself. Needs nothing installed.'
+  dependsOn tasks.named('test')
 }
