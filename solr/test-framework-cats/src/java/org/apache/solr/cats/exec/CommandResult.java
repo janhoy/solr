@@ -151,7 +151,7 @@ public record CommandResult(
     return this;
   }
 
-  /** Port of {@code assert_output --partial}. */
+  /** The output must contain {@code substring} somewhere. */
   public CommandResult assertContains(String substring) {
     String expected = resolve(substring);
     if (!output.contains(expected)) {
@@ -160,7 +160,7 @@ public record CommandResult(
     return this;
   }
 
-  /** Port of {@code refute_output --partial}. */
+  /** The output must not contain {@code substring} anywhere. */
   public CommandResult assertNotContains(String substring) {
     String expected = resolve(substring);
     if (output.contains(expected)) {
@@ -169,7 +169,7 @@ public record CommandResult(
     return this;
   }
 
-  /** Port of {@code assert_output --regexp}. The pattern may match anywhere in the output. */
+  /** The output must match {@code regex}, which may match anywhere in it. */
   public CommandResult assertMatches(String regex) {
     if (!Pattern.compile(resolve(regex), Pattern.DOTALL).matcher(output).find()) {
       throw fail("output did not match: " + resolve(regex));
@@ -177,7 +177,7 @@ public record CommandResult(
     return this;
   }
 
-  /** Port of {@code refute_output --regexp}. */
+  /** The output must not match {@code regex} anywhere. */
   public CommandResult assertNotMatches(String regex) {
     if (Pattern.compile(resolve(regex), Pattern.DOTALL).matcher(output).find()) {
       throw fail("output matched what it should not: " + resolve(regex));
@@ -186,7 +186,7 @@ public record CommandResult(
   }
 
   /**
-   * Port of {@code assert_output} with no flag: the whole output must be exactly {@code expected}.
+   * The whole output must be exactly {@code expectedText}.
    *
    * <p>Named {@code assertExact} rather than {@code assertEquals} so it cannot be mistaken, in a
    * diff, for the static {@code assertEquals(expected, actual)} every test class inherits from
@@ -200,7 +200,7 @@ public record CommandResult(
     return this;
   }
 
-  /** Port of {@code assert_line --index <i>}. */
+  /** The output line at {@code index}, counting from zero, must be exactly {@code expected}. */
   public CommandResult assertLine(int index, String expected) {
     List<String> lines = lines();
     if (index < 0 || index >= lines.size()) {
