@@ -20,6 +20,7 @@ package org.apache.solr.cats.exec;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -232,6 +233,37 @@ public record CommandResult(
               + expected);
     }
     return this;
+  }
+
+  /**
+   * Asserts the command took no longer than {@code limit}, for a test whose subject is how long
+   * something takes — a cache that makes the second run faster, a {@code --timeout} being honoured.
+   *
+   * <p>Measured from the moment the process was spawned to the moment it exited, which is the same
+   * number the transcript prints.
+   */
+  public CommandResult assertDurationAtMost(Duration limit) {
+    if (duration.compareTo(limit) > 0) {
+      throw fail("took " + seconds(duration) + ", expected at most " + seconds(limit));
+    }
+    return this;
+  }
+
+  /**
+   * Asserts the command took at least {@code floor}; the mirror of {@link #assertDurationAtMost}.
+   */
+  public CommandResult assertDurationAtLeast(Duration floor) {
+    if (duration.compareTo(floor) < 0) {
+      throw fail("took " + seconds(duration) + ", expected at least " + seconds(floor));
+    }
+    return this;
+  }
+
+  /** Seconds as the transcript writes them, with the decimal dropped when it is zero. */
+  private static String seconds(Duration d) {
+    double value = d.toMillis() / 1000d;
+    String format = value == Math.rint(value) ? "%.0fs" : "%.1fs";
+    return String.format(Locale.ROOT, format, value);
   }
 
   /**

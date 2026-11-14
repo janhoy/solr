@@ -40,7 +40,9 @@ import org.apache.solr.cats.ShellGate;
 import org.apache.solr.cats.env.CatsHarnessEnv;
 import org.apache.solr.cats.env.PortBlock;
 import org.apache.solr.cats.env.PortLayout;
+import org.apache.solr.cats.exec.BackgroundCommand;
 import org.apache.solr.cats.exec.CatsFiles;
+import org.apache.solr.cats.exec.CommandResult;
 import org.apache.solr.cats.exec.ProgramUnderTest;
 import org.apache.solr.cats.exec.RunningProcess;
 import org.apache.solr.cats.exec.Shells;
@@ -491,6 +493,114 @@ public class CliSessionTest {
   @Test
   public void anArgumentWithASpaceReachesTheProgramIntact() {
     session.run(List.of("mytool", "echo", "two words")).assertExitCode(0).assertExact("two words");
+  }
+
+  // ------------------------------------------------------- timing
+
+  @Test
+  public void durationAssertionsMeasureHowLongTheCommandTook() {
+    CommandResult result = session.run("mytool work 1 0");
+    result.assertDurationAtLeast(Duration.ofSeconds(1)).assertDurationAtMost(Duration.ofMinutes(5));
+
+    AssertionError tooSlow =
+        assertThrows(AssertionError.class, () -> result.assertDurationAtMost(Duration.ZERO));
+    assertTrue(tooSlow.getMessage(), tooSlow.getMessage().contains("expected at most 0s"));
+
+    AssertionError tooFast =
+        assertThrows(
+            AssertionError.class, () -> result.assertDurationAtLeast(Duration.ofMinutes(10)));
+    assertTrue(tooFast.getMessage(), tooFast.getMessage().contains("expected at least 600s"));
+  }
+
+  // ------------------------------------------------------- background commands
+  // The stand-in program prints a line, stays alive, prints another and exits with a given status,
+  // which is every shape these cases need.
+
+  @Test
+  public void aBackgroundCommandIsReadableWhileItRuns() {
+    BackgroundCommand command = session.runInBackground("mytool work 60 0");
+    try {
+      command.awaitOutput("starting", Duration.ofSeconds(60));
+      assertFalse("it has not printed its last line yet", command.hasEnded());
+      assertFalse(command.output(), command.output().contains("finished"));
+      assertTrue(alive(command.pid()));
+
+      String transcript = session.transcript().text();
+      assertTrue(transcript, transcript.contains("$ mytool work 60 0 &"));
+      assertTrue(transcript, transcript.contains("started as pid " + command.pid()));
+    } finally {
+      command.kill();
+    }
+  }
+
+  @Test
+  public void awaitOutputFailsWithWhatTheCommandHasPrintedSoFar() {
+    BackgroundCommand command = session.runInBackground("mytool work 60 0");
+    try {
+      AssertionError failure =
+          assertThrows(
+              AssertionError.class,
+              () -> command.awaitOutput("never printed", Duration.ofSeconds(2)));
+      assertTrue(failure.getMessage(), failure.getMessage().contains("timed out after 2s"));
+      assertTrue(failure.getMessage(), failure.getMessage().contains("never printed"));
+      assertTrue("the output so far is the diagnosis", failure.getMessage().contains("starting"));
+    } finally {
+      command.kill();
+    }
+  }
+
+  @Test
+  public void waitForReturnsTheResultTheCommandExitedWith() {
+    BackgroundCommand command = session.runInBackground("mytool work 1 3");
+    CommandResult result = command.waitFor(Duration.ofMinutes(1));
+    result
+        .assertExitCode(3)
+        .assertContains("starting")
+        .assertContains("finished")
+        .assertDurationAtLeast(Duration.ofSeconds(1));
+    assertTrue(command.hasEnded());
+
+    // The outcome is appended to the transcript when it ends, under the line that started it.
+    String transcript = session.transcript().text();
+    assertTrue(transcript, transcript.contains("$ mytool work 1 3 &"));
+    assertTrue(transcript, transcript.contains("exit 3 in "));
+    assertTrue(transcript, transcript.contains("| finished"));
+  }
+
+  @Test
+  public void waitForKillsAndFailsWhenTheCommandOverrunsIt() {
+    BackgroundCommand command = session.runInBackground("mytool work 60 0");
+    AssertionError failure =
+        assertThrows(AssertionError.class, () -> command.waitFor(Duration.ofSeconds(2)));
+    assertTrue(failure.getMessage(), failure.getMessage().contains("did not finish within 2s"));
+    assertTrue(command.hasEnded());
+    assertFalse(alive(command.pid()));
+  }
+
+  @Test
+  public void killStopsTheCommandAndIsIdempotent() {
+    BackgroundCommand command = session.runInBackground("mytool work 60 0");
+    command.awaitOutput("starting", Duration.ofSeconds(60));
+    command.kill();
+    assertTrue(command.hasEnded());
+    assertFalse(alive(command.pid()));
+    command.kill();
+  }
+
+  @Test
+  public void aBackgroundCommandLeftRunningIsStoppedWhenTheSessionEnds() {
+    CliSession child = session.child("forgot-to-wait");
+    BackgroundCommand command = child.runInBackground("mytool work 60 0");
+    command.awaitOutput("starting", Duration.ofSeconds(60));
+
+    child.close();
+
+    assertTrue("the teardown ended it", command.hasEnded());
+    assertFalse(alive(command.pid()));
+  }
+
+  private static boolean alive(long pid) {
+    return ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
   }
 
   // ------------------------------------------------------- process ownership

@@ -46,6 +46,7 @@ import java.util.stream.Stream;
 import org.apache.solr.cats.Traits;
 import org.apache.solr.cats.env.CatsHarnessEnv;
 import org.apache.solr.cats.env.PortBlock;
+import org.apache.solr.cats.exec.BackgroundCommand;
 import org.apache.solr.cats.exec.CatsFiles;
 import org.apache.solr.cats.exec.CommandResult;
 import org.apache.solr.cats.exec.ProcessKill;
@@ -93,6 +94,7 @@ public class CliSession implements AutoCloseable {
   private final Shell shell;
 
   private final List<Process> startedProcesses = new ArrayList<>();
+  private final List<BackgroundCommand> backgroundCommands = new ArrayList<>();
   private final Map<Long, RunningProcess> ownedProcesses = new LinkedHashMap<>();
 
   private Path cwd;
@@ -603,6 +605,35 @@ public class CliSession implements AutoCloseable {
     return requireExit(execute(resolveForRun(line), timeout, false, stdin), true);
   }
 
+  /**
+   * Starts a command and hands back the live process instead of waiting for it, for a program that
+   * only exits when it is stopped and for a long-running tool a test watches as it works.
+   *
+   * <p>The line goes through the same variable resolution and the same cross-shell rails as {@link
+   * #run(String)}. Nothing is detached — no {@code nohup}, no {@code start /b} — because the
+   * harness holds the process handle, which is also what makes it behave the same under cmd.exe.
+   *
+   * <p>The command is tracked as a direct child of this session, so one the test neither
+   * {@linkplain BackgroundCommand#waitFor waited for} nor {@linkplain BackgroundCommand#kill
+   * killed} is stopped when the session ends.
+   */
+  public BackgroundCommand runInBackground(String line) {
+    requireSingleCommand(line);
+    if (!shellSpecific) {
+      requirePortableLine(line);
+    }
+    String resolved = resolveForRun(line).stripTrailing();
+    Map<String, String> envDiff = envDiff();
+    BackgroundCommand command =
+        ShellExecutor.start(
+            spec(resolved, timeout, false, null),
+            this::recordChild,
+            transcript::recordBackgroundEnd);
+    transcript.recordBackgroundStart(resolved, command.pid(), envDiff);
+    backgroundCommands.add(command);
+    return command;
+  }
+
   private void requireOpen() {
     if (closed) {
       throw new IllegalStateException("Session '" + name + "' is already closed");
@@ -839,20 +870,9 @@ public class CliSession implements AutoCloseable {
     if (stdin != null) {
       transcript.note("on standard input:\n" + stdin);
     }
-    ShellExecutor.Spec spec =
-        new ShellExecutor.Spec(
-            line,
-            shell,
-            cwd,
-            vars,
-            echoedPrefixes(),
-            workDir,
-            "cmd-" + SEQ.incrementAndGet(),
-            commandTimeout,
-            separateStreams,
-            stdin,
-            transcript);
-    CommandResult result = ShellExecutor.execute(spec, this::recordChild);
+    CommandResult result =
+        ShellExecutor.execute(
+            spec(line, commandTimeout, separateStreams, stdin), this::recordChild);
     lastResult = result;
     transcript.record(result, envDiff);
     claimNewProcesses();
@@ -865,6 +885,22 @@ public class CliSession implements AutoCloseable {
               + "s and was killed\n");
     }
     return result;
+  }
+
+  private ShellExecutor.Spec spec(
+      String line, Duration commandTimeout, boolean separateStreams, String stdin) {
+    return new ShellExecutor.Spec(
+        line,
+        shell,
+        cwd,
+        vars,
+        echoedPrefixes(),
+        workDir,
+        "cmd-" + SEQ.incrementAndGet(),
+        commandTimeout,
+        separateStreams,
+        stdin,
+        transcript);
   }
 
   /**
@@ -1074,6 +1110,16 @@ public class CliSession implements AutoCloseable {
           problems.add("could not delete " + stale + ": " + e);
         }
       }
+    }
+
+    // A background command the test neither waited for nor killed: stopped here, and reported, so
+    // nothing silently outlives the scope that started it.
+    for (BackgroundCommand command : backgroundCommands) {
+      if (command.hasEnded()) {
+        continue;
+      }
+      log.warn("Session '{}' left a background command running; stopping {}", name, command);
+      command.kill();
     }
 
     // A command that overran its timeout may still have a live shell behind it.
