@@ -370,8 +370,8 @@ public abstract class CatsHarnessEnv {
         isWindows() ? new TreeMap<>(String.CASE_INSENSITIVE_ORDER) : new LinkedHashMap<>();
     env.putAll(System.getenv());
     env.putAll(programVars);
-    // With the launcher on PATH, one command string works on both shells: 'solr' on bash and
-    // 'solr.cmd' on cmd, the latter through PATHEXT rather than any rewriting by the harness.
+    // With the launcher on PATH, one command string works on both shells: the bare launcher name
+    // on bash and its .cmd twin on cmd, through PATHEXT rather than any rewriting by the harness.
     launcherDir()
         .ifPresent(
             dir -> {

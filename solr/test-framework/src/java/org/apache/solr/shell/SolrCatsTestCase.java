@@ -42,6 +42,10 @@ import org.junit.rules.TestRule;
  * helpers — comes from {@link CatsDsl}, which is generic; this class adds Solr: the distribution to
  * drive, the {@code cli} trait, and the collection and ZooKeeper helpers.
  *
+ * <p>A test is expected to pass under both shells; where {@code bin/solr} and {@code bin\solr.cmd}
+ * genuinely differ — an option only one accepts, {@code solr.in.sh} versus {@code solr.in.cmd}
+ * handling, a Windows-only path quirk — {@code @EnabledOnShell} restricts it to one of them.
+ *
  * <p>Two scopes, mirroring BATS:
  *
  * <ul>
