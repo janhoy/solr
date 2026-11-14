@@ -354,7 +354,8 @@ def configureBatsTask(BatsTask task, String outputName, boolean usePicocli) {
 }
 
 // CATS - Cross-platform Automated Testing System - the CLI suites built on the
-// org.apache.solr.shell harness in solr/test-framework. Like the BATS suites these need the
+// org.apache.solr.cats harness in solr/test-framework-cats and its Solr layer in
+// solr/test-framework. Like the BATS suites these need the
 // unpacked distribution, so they are not part of 'check' and the stock 'test' task is turned off.
 tasks.named('test') {
   enabled = false
@@ -384,7 +385,7 @@ def configureCatsTestTask(Test task, String outputName, String picocli) {
   def catsTestOutput = file("$buildDir/$outputName")
   task.inputs.dir(distDir)
   task.environment SOLR_TIP: distDir.toString()
-  task.environment TEST_OUTPUT_DIR: catsTestOutput.toString()
+  task.environment CATS_OUTPUT_DIR: catsTestOutput.toString()
   if (picocli != null) {
     task.environment SOLR_PICOCLI: picocli
   }

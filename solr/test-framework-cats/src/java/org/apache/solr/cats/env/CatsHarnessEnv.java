@@ -61,13 +61,6 @@ public abstract class CatsHarnessEnv {
    */
   public static final Duration DEFAULT_TIMEOUT = Duration.ofMinutes(5);
 
-  /**
-   * The output-directory variable from before the harness owned the name, still accepted so a build
-   * that sets it keeps working.
-   */
-  // TODO G6.3: drop once the Gradle task sets CATS_OUTPUT_DIR.
-  private static final String LEGACY_OUTPUT_DIR_VAR = "TEST_OUTPUT_DIR";
-
   private final ProgramUnderTest program;
   private final Lookup lookup;
   private final Optional<Path> installDir;
@@ -332,9 +325,6 @@ public abstract class CatsHarnessEnv {
       return onDefaultFileSystem(explicit);
     }
     String configured = Lookup.CATS.get("CATS_OUTPUT_DIR");
-    if (configured == null) {
-      configured = lookup.get(LEGACY_OUTPUT_DIR_VAR);
-    }
     return configured == null ? tempDir("cats-") : onDefaultFileSystem(Path.of(configured));
   }
 
