@@ -414,8 +414,8 @@ public class CatsCliHelpers {
   }
 
   /**
-   * The {@code curl} that reproduces a request, for the transcript. Quoted bash-style because it is
-   * there for a reader to paste, not for the harness to run — and every variable is already
+   * The curl command line that reproduces a request, for the transcript. Quoted bash-style because
+   * it is there for a reader to paste, not for the harness to run — and every variable is already
    * resolved by the time it is built, so what the transcript shows is the real request.
    */
   static String curl(
