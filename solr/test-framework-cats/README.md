@@ -123,25 +123,25 @@ public class MytoolServer implements ProgramUnderTest {
     return new PortLayout(4, new int[] {0, 1}, 20_000, 30_000, 200, 0);
   }
 
-  /** The instances whose command line carries this run's marker, found however the platform allows. */
+  /** The processes whose command line carries this run's marker, found however the platform allows. */
   @Override
-  public List<RunningProgram> running(String marker) {
+  public List<RunningProcess> running(String marker) {
     return ProcessHandle.allProcesses()
         .filter(p -> p.info().commandLine().orElse("").contains(marker))
-        .map(p -> new RunningProgram(p.pid(), portOf(p)))
+        .map(p -> RunningProcess.of(p.pid(), portOf(p)))
         .toList();
   }
 
-  /** Tried before the harness resorts to killing the process. */
+  /** Tried before the harness resorts to killing the process' pid. */
   @Override
-  public Optional<String> stopCommand(int port) {
-    return Optional.of("mytool stop --port " + port);
+  public Optional<String> stopCommand(RunningProcess process) {
+    return Optional.of("mytool stop --port " + process.ports().get(0));
   }
 
   /** Removed after a force-kill, so a later command does not walk them. */
   @Override
-  public List<Path> staleStateFiles(Path stateDir, int port) {
-    return List.of(stateDir.resolve("mytool-" + port + ".pid"));
+  public List<Path> staleStateFiles(Path stateDir, RunningProcess process) {
+    return List.of(stateDir.resolve("mytool-" + process.ports().get(0) + ".pid"));
   }
 
   /** The named traits of this run, read off the environment. */

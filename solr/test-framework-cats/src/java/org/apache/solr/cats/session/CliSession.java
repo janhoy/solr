@@ -51,7 +51,7 @@ import org.apache.solr.cats.exec.CommandResult;
 import org.apache.solr.cats.exec.ProcessKill;
 import org.apache.solr.cats.exec.ProgramRegistry;
 import org.apache.solr.cats.exec.ProgramUnderTest;
-import org.apache.solr.cats.exec.RunningProgram;
+import org.apache.solr.cats.exec.RunningProcess;
 import org.apache.solr.cats.exec.Shell;
 import org.apache.solr.cats.exec.ShellAssertionError;
 import org.apache.solr.cats.exec.ShellExecutor;
@@ -69,9 +69,10 @@ import org.slf4j.LoggerFactory;
  * shell while control flow stays in Java. One session is scoped to a test class; each test gets a
  * {@linkplain #child child} of it whose environment and cwd changes are discarded afterwards.
  *
- * <p>Sessions track which nodes they started by scanning the running process list after each
- * command, filtered to this scope's marker and port block, and stop exactly those on {@link
- * #close()}.
+ * <p>Sessions track which processes they started: a direct child of one of their shells by its
+ * handle, and a program that daemonised itself away from that shell by scanning the running process
+ * list after each command, filtered to this scope's marker and port block. Exactly those are
+ * stopped on {@link #close()}.
  */
 public class CliSession implements AutoCloseable {
 
@@ -92,7 +93,7 @@ public class CliSession implements AutoCloseable {
   private final Shell shell;
 
   private final List<Process> startedProcesses = new ArrayList<>();
-  private final Map<Integer, Long> ownedNodes = new LinkedHashMap<>();
+  private final Map<Long, RunningProcess> ownedProcesses = new LinkedHashMap<>();
 
   private Path cwd;
   private Duration timeout;
@@ -851,10 +852,10 @@ public class CliSession implements AutoCloseable {
             separateStreams,
             stdin,
             transcript);
-    CommandResult result = ShellExecutor.execute(spec, startedProcesses::add);
+    CommandResult result = ShellExecutor.execute(spec, this::recordChild);
     lastResult = result;
     transcript.record(result, envDiff);
-    claimNewNodes();
+    claimNewProcesses();
     if (result.timedOut()) {
       throw new ShellAssertionError(
           "\n"
@@ -886,69 +887,95 @@ public class CliSession implements AutoCloseable {
     return diff;
   }
 
-  // ------------------------------------------------------- node ownership
+  // ------------------------------------------------------- process ownership
+
+  /** Tracks a shell the harness has just spawned, so nothing it started outlives this session. */
+  private void recordChild(Process child) {
+    startedProcesses.add(child);
+    registry.recordChild(child);
+  }
 
   /**
-   * Records any node of this class's that has appeared since the last check as belonging to this
+   * Records any process of this class's that has appeared since the last check as belonging to this
    * session, so cleanup stops exactly the ones this scope started.
    *
-   * <p>Asked of the running process list rather than of pid files, so it behaves the same on both
-   * platforms and sees a node started in the foreground. Filtered to this class's port block,
-   * because on the cmd side the underlying record is shared with every other class.
+   * <p>Asked of the running process list rather than of state files, so it behaves the same on both
+   * platforms and sees a program started in the foreground. Filtered to this class's port block,
+   * because on the cmd side the underlying record is shared with every other class; a program with
+   * no ports is left to its marker alone.
    */
-  // owner != this compares session identity on purpose, so equals() would be wrong here.
-  @SuppressWarnings("ReferenceEquality")
-  private void claimNewNodes() {
-    for (RunningProgram node : program.running(harnessEnv.marker())) {
-      if (!harnessEnv.ports().contains(node.port())) {
+  private void claimNewProcesses() {
+    for (RunningProcess process : program.running(harnessEnv.marker())) {
+      if (!process.ports().isEmpty() && !ours(process)) {
         continue;
       }
-      if (!registry.recordIfNew(node)) {
+      if (!registry.recordIfNew(process)) {
         continue;
       }
 
-      // A node on a port an ancestor already owns stays the ancestor's, with its pid brought up to
-      // date. Otherwise a test that restarts the node its class started in @BeforeClass would take
-      // ownership of it, and stop it when that one test ended - tearing down the shared node every
-      // later test in the class still expects to be running.
-      CliSession owner = ownerOf(node.port());
-      if (owner != null && owner != this) {
-        owner.ownedNodes.put(node.port(), node.pid());
+      // A process sharing a port with one already owned stays with its owner, with its pid brought
+      // up to date. Otherwise a test that restarts the process its class started in @BeforeClass
+      // would take ownership of it, and stop it when that one test ended - tearing down the shared
+      // process every later test in the class still expects to be running.
+      CliSession owner = ownerOf(process);
+      if (owner != null) {
+        owner.replace(process);
         if (log.isInfoEnabled()) {
           log.info(
-              "Node on port {} restarted as pid {}; it stays owned by session '{}'",
-              node.port(),
-              node.pid(),
+              "The process on {} restarted as pid {}; it stays owned by session '{}'",
+              process.ports(),
+              process.pid(),
               owner.name);
         }
         continue;
       }
 
-      ownedNodes.put(node.port(), node.pid());
+      ownedProcesses.put(process.pid(), process);
       if (log.isInfoEnabled()) {
-        log.info("Session '{}' now owns node on port {} (pid {})", name, node.port(), node.pid());
+        log.info("Session '{}' now owns {}", name, process);
       }
     }
   }
 
+  /** Whether any of a process' ports is one this scope claimed. */
+  private boolean ours(RunningProcess process) {
+    return process.ports().stream().anyMatch(port -> harnessEnv.ports().contains(port));
+  }
+
   /**
-   * The session in this scope's ancestry that already owns a node on {@code port}, or null.
+   * The session in this scope's ancestry that already owns a process sharing a port with {@code
+   * process}, or null. A process with no ports has no such predecessor: its pid is its identity.
    *
    * <p>Walks parents only, never children: ownership may move up to a longer-lived scope, so that
    * cleanup happens when that scope ends, but never down into a scope that is about to close.
    */
-  private CliSession ownerOf(int port) {
+  private CliSession ownerOf(RunningProcess process) {
     for (CliSession s = this; s != null; s = s.parent) {
-      if (s.ownedNodes.containsKey(port)) {
-        return s;
+      for (RunningProcess owned : s.ownedProcesses.values()) {
+        if (owned.ports().stream().anyMatch(process::hasPort)) {
+          return s;
+        }
       }
     }
     return null;
   }
 
-  /** The ports of the nodes this session started, in the order they appeared. */
+  /** Takes over a restarted process from the dead pid it had before. */
+  private void replace(RunningProcess process) {
+    ownedProcesses.values().removeIf(owned -> owned.ports().stream().anyMatch(process::hasPort));
+    ownedProcesses.put(process.pid(), process);
+  }
+
+  /** The processes this session started, in the order they appeared. */
+  public List<RunningProcess> ownedProcesses() {
+    return List.copyOf(ownedProcesses.values());
+  }
+
+  /** The ports of the processes this session started, in the order they appeared. */
   public Set<Integer> ownedPorts() {
-    return new LinkedHashSet<>(ownedNodes.keySet());
+    Set<Integer> ports = new LinkedHashSet<>();
+    ownedProcesses.values().forEach(process -> ports.addAll(process.ports()));
+    return ports;
   }
 
   // ---------------------------------------------------------------- helpers
@@ -1014,10 +1041,9 @@ public class CliSession implements AutoCloseable {
       }
     }
 
-    // Graceful stop first, so the program gets to shut down cleanly and remove its own pid file.
-    for (Map.Entry<Integer, Long> node : ownedNodes.entrySet()) {
-      int port = node.getKey();
-      Optional<String> stop = program.stopCommand(port);
+    // Graceful stop first, so the program gets to shut down cleanly and remove its own state files.
+    for (RunningProcess process : ownedProcesses.values()) {
+      Optional<String> stop = program.stopCommand(process);
       if (stop.isEmpty()) {
         continue;
       }
@@ -1027,21 +1053,21 @@ public class CliSession implements AutoCloseable {
           log.warn("'{}' exited {}", stop.get(), result.status());
         }
       } catch (RuntimeException | AssertionError e) {
-        problems.add("stopping the program on port " + port + ": " + e);
+        problems.add("stopping the program (" + process + "): " + e);
       }
     }
 
-    // Anything still alive gets killed; the pid file is how we find it.
-    for (Map.Entry<Integer, Long> node : ownedNodes.entrySet()) {
-      long pid = node.getValue();
+    // Anything still alive gets killed, by the pid discovery reported.
+    for (RunningProcess process : ownedProcesses.values()) {
+      long pid = process.pid();
       if (ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) {
-        log.warn("pid {} (port {}) still alive after stop; killing", pid, node.getKey());
+        log.warn("{} still alive after stop; killing", process);
         if (!ProcessKill.killTree(pid, Duration.ofSeconds(10))) {
-          problems.add("could not kill pid " + pid + " on port " + node.getKey());
+          problems.add("could not kill " + process);
         }
       }
-      registry.forget(node.getKey(), pid);
-      for (Path stale : program.staleStateFiles(harnessEnv.stateDir(), node.getKey())) {
+      registry.forget(process);
+      for (Path stale : program.staleStateFiles(harnessEnv.stateDir(), process)) {
         try {
           Files.deleteIfExists(stale);
         } catch (IOException e) {
@@ -1055,6 +1081,7 @@ public class CliSession implements AutoCloseable {
       if (process.isAlive()) {
         ProcessKill.killTree(process.toHandle(), Duration.ofSeconds(10));
       }
+      registry.forgetChild(process);
     }
 
     deleteTempScripts();

@@ -302,7 +302,7 @@ public class CatsCliHelpers {
    * A PUT whose body is a file's bytes: the port of {@code curl --data-binary @<file> -X PUT}.
    *
    * <p>Given a longer timeout than the other requests, because what this uploads is a file rather
-   * than a request a node answers from memory.
+   * than a request the program answers from memory.
    */
   public HttpResult httpPut(String pathAndQuery, String contentType, Path file) {
     return httpPut(defaultPort(), pathAndQuery, contentType, file);

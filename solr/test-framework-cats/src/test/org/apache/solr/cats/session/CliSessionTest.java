@@ -42,7 +42,7 @@ import org.apache.solr.cats.env.PortBlock;
 import org.apache.solr.cats.env.PortLayout;
 import org.apache.solr.cats.exec.CatsFiles;
 import org.apache.solr.cats.exec.ProgramUnderTest;
-import org.apache.solr.cats.exec.RunningProgram;
+import org.apache.solr.cats.exec.RunningProcess;
 import org.apache.solr.cats.exec.Shells;
 import org.junit.After;
 import org.junit.Before;
@@ -81,7 +81,7 @@ public class CliSessionTest {
       new PortLayout(4, new int[] {0, 1, 2, 1000}, 20_000, 30_000, 200, 0);
 
   private static final class ScriptedProgram implements ProgramUnderTest {
-    private List<RunningProgram> running = List.of();
+    private List<RunningProcess> running = List.of();
 
     @Override
     public PortLayout portLayout() {
@@ -89,7 +89,7 @@ public class CliSessionTest {
     }
 
     @Override
-    public List<RunningProgram> running(String marker) {
+    public List<RunningProcess> running(String marker) {
       return running;
     }
   }
@@ -493,15 +493,15 @@ public class CliSessionTest {
     session.run(List.of("mytool", "echo", "two words")).assertExitCode(0).assertExact("two words");
   }
 
-  // ------------------------------------------------------- node ownership
+  // ------------------------------------------------------- process ownership
   // Pids no process could have, so cleanup finds nothing alive and kills nothing.
 
   @Test
-  public void aNodeIsOwnedByTheSessionThatStartedIt() {
+  public void aProcessIsOwnedByTheSessionThatStartedIt() {
     int port = env.ports().at(1);
     CliSession child = session.child("starter");
     try {
-      program.running = List.of(new RunningProgram(90_000_001L, port));
+      program.running = List.of(RunningProcess.of(90_000_001L, port));
       child.run("echo started");
       assertEquals(Set.of(port), child.ownedPorts());
       assertEquals(Set.of(), session.ownedPorts());
@@ -511,31 +511,43 @@ public class CliSessionTest {
   }
 
   @Test
-  public void aRestartedNodeStaysOwnedByTheAncestorSession() {
-    // Otherwise a test that restarts the node its class started would take ownership of it, and
-    // stop it when that one test ended — tearing down the node every later test still expects.
+  public void aRestartedProcessStaysOwnedByTheAncestorSession() {
+    // Otherwise a test that restarts the process its class started would take ownership of it, and
+    // stop it when that one test ended — tearing down what every later test still expects.
     int port = env.ports().at(0);
-    program.running = List.of(new RunningProgram(90_000_002L, port));
+    program.running = List.of(RunningProcess.of(90_000_002L, port));
     session.run("echo started");
     assertEquals(Set.of(port), session.ownedPorts());
 
     CliSession child = session.child("restarter");
     try {
-      program.running = List.of(new RunningProgram(90_000_003L, port));
+      program.running = List.of(RunningProcess.of(90_000_003L, port));
       child.run("echo restarted");
       assertEquals(Set.of(port), session.ownedPorts());
-      assertEquals(Set.of(), child.ownedPorts());
+      assertEquals(List.of(RunningProcess.of(90_000_003L, port)), session.ownedProcesses());
+      assertEquals(List.of(), child.ownedProcesses());
     } finally {
       child.close();
     }
   }
 
   @Test
-  public void aNodeOutsideThisClassesPortBlockIsNobodysBusiness() {
-    // The record of running nodes is shared with every other class on the cmd side, so the block
-    // is what tells this class's nodes from a sibling's.
-    program.running = List.of(new RunningProgram(90_000_004L, env.ports().at(0) + 500));
+  public void aProcessOutsideThisClassesPortBlockIsNobodysBusiness() {
+    // The record of running processes is shared with every other class on the cmd side, so the
+    // block is what tells this class's processes from a sibling's.
+    program.running = List.of(RunningProcess.of(90_000_004L, env.ports().at(0) + 500));
     session.run("echo elsewhere");
+    assertEquals(List.of(), session.ownedProcesses());
+  }
+
+  @Test
+  public void aProcessWithNoPortsIsOwnedOnItsMarkerAlone() {
+    // Nothing to filter on: a program the harness finds by marker and that listens on nothing is
+    // identified by its pid, and belongs to the session whose command made it appear.
+    RunningProcess discovered = RunningProcess.of(90_000_005L);
+    program.running = List.of(discovered);
+    session.run("echo started");
+    assertEquals(List.of(discovered), session.ownedProcesses());
     assertEquals(Set.of(), session.ownedPorts());
   }
 
@@ -715,7 +727,7 @@ public class CliSessionTest {
   @Test
   public void anHttpRequestCarryingHeadersReportsAConnectionFailureTheSameWay() {
     // The overload that ports 'curl -H "Name: value"'; nothing is listening on this session's
-    // block, so it exercises the request path without needing a node.
+    // block, so it exercises the request path without needing a server.
     session
         .helpers()
         .http(session.ports().at(0), "/items/select", Map.of("Accept-Encoding", "gzip"))
@@ -725,7 +737,7 @@ public class CliSessionTest {
   @Test
   public void aMultipartFilePostReportsAConnectionFailureTheSameWay() {
     // The overload that ports 'curl -F "field=@file"'; nothing is listening on this session's
-    // block, so it exercises building and sending the multipart body without needing a node.
+    // block, so it exercises building and sending the multipart body without needing a server.
     Path document = session.write("doc.bin", "a document");
     session
         .helpers()
@@ -747,7 +759,7 @@ public class CliSessionTest {
   public void aPostOrPutThatCannotConnectIsReportedAsAFailureNotAStatus() {
     // The body-carrying ports of 'curl -X POST -d ...' and 'curl --data-binary @file -X PUT ...'.
     // Nothing is listening on the block this session claimed, so this exercises the request path
-    // without needing a node.
+    // without needing a server.
     int port = session.ports().at(0);
     session
         .helpers()
