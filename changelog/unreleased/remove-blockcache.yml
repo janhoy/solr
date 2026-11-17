@@ -1,0 +1,8 @@
+title: >
+  Removed the unused `org.apache.solr.blockcache` package (`BlockDirectory` and friends), left behind
+  when the HDFS module was removed in Solr 10. No `DirectoryFactory` could construct it, so there was
+  no way to enable it. It will sit in our git history should anyone need to revive it later.
+type: removed
+authors:
+  - name: Jan Høydahl
+    nick: janhoy

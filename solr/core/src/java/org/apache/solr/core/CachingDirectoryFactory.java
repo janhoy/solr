@@ -345,15 +345,8 @@ public abstract class CachingDirectoryFactory extends DirectoryFactory {
           coreContainer != null ? coreContainer.isShutDown() : "null");
     }
     try {
-      if (coreContainer != null
-          && coreContainer.isShutDown()
-          && val.directory instanceof ShutdownAwareDirectory) {
-        log.debug("Closing directory on shutdown: {}", val.path);
-        ((ShutdownAwareDirectory) val.directory).closeOnShutdown();
-      } else {
-        log.debug("Closing directory: {}", val.path);
-        val.directory.close();
-      }
+      log.debug("Closing directory: {}", val.path);
+      val.directory.close();
       assert ObjectReleaseTracker.release(val.directory);
     } catch (Exception e) {
       log.error("Error closing directory", e);

@@ -10,7 +10,6 @@ Includes software from other Apache Software Foundation projects,
 including, but not limited to:
   - Apache Lucene Java
   - Apache Commons
-  - Apache Blur
   - Apache Hadoop
 
 This product includes code forked from the Java-HLL library.
@@ -85,9 +84,6 @@ Copyright (c) 2007, Eclipse Foundation, Inc. and its licensors.
 Jakarta XML Binding: https://github.com/javaee/jaxb-spec
 License: Common Development and Distribution License (CDDL) v1.1 (https://glassfish.java.net/public/CDDL+GPL_1_1.html)
 Copyright (c) 2003-2018 Oracle and/or its affiliates. All rights reserved.
-
-The HdfsDirectory and BlockDirectory were derived from
-the Apache Blur incubating project and are Apache License 2.0.
 
 ASM (Java bytecode manipulation and analysis framework): http://asm.ow2.org/
 Copyright (c) 2000-2005 INRIA, France Telecom
