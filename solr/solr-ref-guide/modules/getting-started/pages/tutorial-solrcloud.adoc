@@ -82,11 +82,12 @@ The script will start each node in order and show you the command it uses to sta
 
 [,bash]
 ----
-bin/solr start --solr-home example/cloud/node1/solr -p 8983
+bin/solr start --solr-home /tmp/solr-example/cloud/node1/solr -p 8983
 ----
 
 The first node will also start an embedded ZooKeeper server bound to port 9983.
-The Solr home for the first node is in `example/cloud/node1/solr` as indicated by the `--solr-home` option.
+The Solr home for the first node is in `solr-example/cloud/node1/solr` under the system temp directory, as indicated by the `--solr-home` option.
+The examples never write into the Solr installation; the temp directory is `/tmp` on most Linux systems, `$TMPDIR` on macOS and `%TEMP%` on Windows, and the script prints the exact paths.
 
 After starting up all nodes in the cluster, the script prompts you for the name of the collection to create:
 
@@ -139,7 +140,7 @@ To verify this, you can run the status command:
 bin/solr status
 ----
 
-If you encounter any errors during this process, check the Solr log files in `example/cloud/node1/logs` and `example/cloud/node2/logs`.
+If you encounter any errors during this process, check the Solr log files in `/tmp/solr-example/cloud/node1/logs` and `/tmp/solr-example/cloud/node2/logs`.
 
 You can see how your collection is deployed across the cluster by visiting the cloud panel in the Solr Admin UI: http://localhost:8983/solr/#/~cloud.
 Solr also provides a way to perform basic diagnostics for a collection using the healthcheck command:
@@ -176,14 +177,14 @@ For instance, to restart node1 running on port 8983 (with an embedded ZooKeeper 
 
 [,bash]
 ----
-bin/solr restart -p 8983 --solr-home example/cloud/node1/solr
+bin/solr restart -p 8983 --solr-home /tmp/solr-example/cloud/node1/solr
 ----
 
 To restart node2 running on port 7574, you can do:
 
 [,bash]
 ----
-bin/solr restart -p 7574 -z localhost:9983 --solr-home example/cloud/node2/solr
+bin/solr restart -p 7574 -z localhost:9983 --solr-home /tmp/solr-example/cloud/node2/solr
 ----
 
 Notice that you need to specify the ZooKeeper address (`-z localhost:9983`) when starting node2 so that it can join the cluster with node1.
@@ -205,11 +206,12 @@ Example (with directory structure) that adds a node to an example started with "
 
 [,bash]
 ----
-mkdir -p example/cloud/node3/solr
-bin/solr start --solr-home example/cloud/node3/solr -p 8987 -z localhost:9983
+mkdir -p /tmp/solr-example/cloud/node3/solr
+SOLR_LOGS_DIR=/tmp/solr-example/cloud/node3/logs \
+  bin/solr start --solr-home /tmp/solr-example/cloud/node3/solr -p 8987 -z localhost:9983
 ----
 
-The previous command will start another Solr node on port 8987 with Solr home set to `example/cloud/node3/solr`.
-The new node will write its log files to `example/cloud/node3/logs`.
+The previous command will start another Solr node on port 8987 with Solr home set to `/tmp/solr-example/cloud/node3/solr`.
+The new node will write its log files to `/tmp/solr-example/cloud/node3/logs`.
 
 Once you're comfortable with how the SolrCloud example works, we recommend using the process described in xref:deployment-guide:taking-solr-to-production.adoc[] for setting up SolrCloud nodes in production.

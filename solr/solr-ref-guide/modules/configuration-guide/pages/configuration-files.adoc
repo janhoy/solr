@@ -24,7 +24,7 @@ Many of these files are in XML format, although APIs that interact with configur
 When Solr runs, it needs access to a home directory.
 
 When you first install Solr, your home directory is `server/solr`.
-However, some examples may change this location (such as, if you run `bin/solr start -e cloud`, your home directory will be `example/cloud`).
+The examples use their own location instead: if you run `bin/solr start -e cloud`, your home directory will be `solr-example/cloud` under the system temp directory.
 
 The home directory contains important configuration information and is the place where Solr will store its index.
 The layout of the home directory will look a little different when you are running Solr in a user-managed cluster or standalone installation vs. when you are running a SolrCloud cluster.

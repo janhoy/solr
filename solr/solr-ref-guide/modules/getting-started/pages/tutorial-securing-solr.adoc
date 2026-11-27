@@ -486,14 +486,14 @@ unset SOLR_INCLUDE
 bin/solr start -e secure
 ----
 
-The shortcut uses `example/secure`, independently of the tutorial's `tutorial/secure` directory.
+The shortcut uses `solr-example/secure` under the system temp directory (e.g. `/tmp/solr-example/secure`), independently of the tutorial's `tutorial/secure` directory.
 Stop the manual tutorial nodes first if you use the same ports.
 Each invocation stops the nodes recorded in this example's PID directory and replaces its generated certificates, accounts, and collection data.
 All contents of the example home are deleted; only pass a dedicated, disposable directory to `--solr-home`.
 Stop any other cluster first if it uses the same ports.
-The example creates isolated homes in `example/secure/node1/solr` and `example/secure/node2/solr`, plus certificates and configuration in `example/secure/tls`.
+The example creates isolated homes in `/tmp/solr-example/secure/node1/solr` and `/tmp/solr-example/secure/node2/solr`, plus certificates and configuration in `/tmp/solr-example/secure/tls`.
 Each node writes its logs beside its home, in `node1/logs` or `node2/logs`.
-Its include file is `example/secure/tls/solr.in.sh`.
+Its include file is `/tmp/solr-example/secure/tls/solr.in.sh`.
 Unlike the manual steps above, the shortcut generates a fresh password each run instead of reusing a fixed one; it prints that password, and the demonstration accounts `admin`, `index`, `search`, `zk-admin`, and `zk-readonly` all use it.
 The example performs the setup from this tutorial and prints its configuration path and commands for checking status and stopping the nodes.
 Inspect its generated files to connect the automated setup to the manual steps above.
@@ -503,7 +503,7 @@ For unattended startup, a different first port, or a separate cluster directory,
 [source,bash]
 ----
 bin/solr start -e secure --no-prompt -p 8993 \
-  --solr-home "$PWD/example/secure/another-cluster"
+  --solr-home "/tmp/solr-example/another-cluster"
 ----
 
 The second node uses the next port; embedded ZooKeeper uses the first port plus 1000.
