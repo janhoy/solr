@@ -526,6 +526,7 @@ IF "%firstChar%"=="-" (
   goto invalid_cmd_line
 )
 set "SOLR_HOME=%~2"
+set "PASS_TO_RUN_EXAMPLE=--solr-home "%~2" !PASS_TO_RUN_EXAMPLE!"
 SHIFT
 SHIFT
 goto parse_args

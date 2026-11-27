@@ -282,6 +282,7 @@ public class RunExampleTool extends ToolBase {
   protected Path serverDir;
   protected Path exampleDir;
   protected Path solrHomeDir;
+
   protected String urlScheme;
   private boolean usingScriptInputs = false;
 
@@ -632,11 +633,14 @@ public class RunExampleTool extends ToolBase {
       String solrHomeProp = EnvUtils.getProperty("solr.home");
       if (solrHomeProp != null && !solrHomeProp.isEmpty()) {
         solrHomeDir = Path.of(solrHomeProp);
-      } else if ("cloud".equals(exampleType) || "secure".equals(exampleType)) {
-        solrHomeDir = exampleDir.resolve(exampleType);
-        if (!Files.isDirectory(solrHomeDir)) Files.createDirectory(solrHomeDir);
       } else {
-        solrHomeDir = serverDir.resolve("solr");
+        // Examples keep their data out of the installation, which may not be writable
+        Path examplesRoot = Path.of(System.getProperty("java.io.tmpdir")).resolve("solr-example");
+        if ("cloud".equals(exampleType) || "secure".equals(exampleType)) {
+          solrHomeDir = Files.createDirectories(examplesRoot.resolve(exampleType));
+        } else {
+          solrHomeDir = setupSolrHomeDir(serverDir, examplesRoot, exampleType).resolve("solr");
+        }
       }
     }
     if ("secure".equals(exampleType)) Files.createDirectories(solrHomeDir);
@@ -1622,25 +1626,10 @@ public class RunExampleTool extends ToolBase {
 
     var startCmd = new org.apache.commons.exec.CommandLine(command.get(0));
     startCmd.addArguments(command.subList(1, command.size()).toArray(String[]::new), false);
+    Map<String, String> startEnv = nodeEnvironment(solrHomeDir, isWindows);
 
     if (isWindows) {
-      // On Windows, the execution doesn't return, so we have to execute async. This process runs
-      // inside bin\solr.cmd, whose SOLR_* variables are its own working state, so the node gets
-      // the caller's SOLR_* settings instead, which solr.cmd saved as CALLER_SOLR_* on entry.
-      Map<String, String> startEnv = new HashMap<>();
-      Map<String, String> procEnv = EnvironmentUtils.getProcEnvironment();
-      if (procEnv != null) {
-        for (Map.Entry<String, String> entry : procEnv.entrySet()) {
-          String envVar = entry.getKey();
-          String envVarVal = entry.getValue();
-          if (envVarVal == null || "EXAMPLE".equals(envVar)) continue;
-          if (envVar.startsWith(CALLER_ENV_PREFIX + "SOLR_")) {
-            startEnv.put(envVar.substring(CALLER_ENV_PREFIX.length()), envVarVal);
-          } else if (!envVar.startsWith("SOLR_") && !envVar.startsWith(CALLER_ENV_PREFIX)) {
-            startEnv.put(envVar, envVarVal);
-          }
-        }
-      }
+      // On Windows, the execution doesn't return, so we have to execute async
       DefaultExecuteResultHandler handler = new DefaultExecuteResultHandler();
       executor.execute(startCmd, startEnv, handler);
       // wait for execution.
@@ -1659,7 +1648,7 @@ public class RunExampleTool extends ToolBase {
       }
     } else {
       try {
-        int code = executor.execute(startCmd);
+        int code = executor.execute(startCmd, startEnv);
         if (code != 0) throw new Exception("Failed to start Solr using command: " + cmdStr);
       } catch (ExecuteException e) {
         throw new Exception("Failed to start Solr using command: " + cmdStr + " Exception : " + e);
@@ -1856,6 +1845,46 @@ public class RunExampleTool extends ToolBase {
         "\nSolr is running on " + solrURI.getPort() + " in " + mode + " mode with status:\n" + arr);
 
     return nodeStatus;
+  }
+
+  /**
+   * The environment for an example node: the caller's own settings, plus logs next to the node's
+   * Solr home and, when the default PID directory is not writable, PID files there too, unless the
+   * caller set {@code SOLR_LOGS_DIR} or {@code SOLR_PID_DIR}. So an example never needs to write
+   * into the installation.
+   */
+  Map<String, String> nodeEnvironment(Path nodeSolrHome, boolean isWindows) throws IOException {
+    Map<String, String> env = new HashMap<>();
+    for (Map.Entry<String, String> entry : EnvironmentUtils.getProcEnvironment().entrySet()) {
+      String name = entry.getKey();
+      String value = entry.getValue();
+      if (value == null || "EXAMPLE".equals(name)) continue;
+      if (!isWindows) {
+        env.put(name, value);
+      } else if (name.startsWith(CALLER_ENV_PREFIX + "SOLR_")) {
+        // This process runs inside bin\solr.cmd, whose SOLR_* variables are its own working
+        // state, so the node gets the caller's SOLR_* settings, saved as CALLER_SOLR_* on entry.
+        env.put(name.substring(CALLER_ENV_PREFIX.length()), value);
+      } else if (!name.startsWith("SOLR_") && !name.startsWith(CALLER_ENV_PREFIX)) {
+        env.put(name, value);
+      }
+    }
+    Path nodeDir = nodeSolrHome.toAbsolutePath().getParent();
+    env.putIfAbsent("SOLR_LOGS_DIR", nodeDir.resolve("logs").toString());
+    if (!env.containsKey("SOLR_PID_DIR")) {
+      Path defaultPidDir =
+          Path.of(
+              EnvUtils.getProperty(
+                  "solr.pid.dir", serverDir.getParent().resolve("bin").toString()));
+      boolean writable;
+      try {
+        writable = Files.isWritable(defaultPidDir);
+      } catch (SecurityException e) {
+        writable = false;
+      }
+      if (!writable) env.put("SOLR_PID_DIR", nodeDir.toString());
+    }
+    return env;
   }
 
   protected Path setupSolrHomeDir(Path serverDir, Path solrHomeParentDir, String dirName)

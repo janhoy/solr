@@ -97,6 +97,11 @@ public class TestSolrCLIRunExample extends SolrTestCaseJ4 {
     }
 
     @Override
+    public int execute(CommandLine cmd, Map<String, String> env) throws IOException {
+      return execute(cmd);
+    }
+
+    @Override
     public int execute(CommandLine cmd) throws IOException {
       String exe = cmd.getExecutable();
       assert (exe.endsWith("solr") || exe.endsWith("solr.cmd"));
@@ -420,6 +425,7 @@ public class TestSolrCLIRunExample extends SolrTestCaseJ4 {
       fail(solrHomeDir + " not found and is required to run this test!");
 
     Path solrExampleDir = createTempDir();
+    Path exampleSolrHome = createTempDir();
 
     Path solrServerDir = solrHomeDir.getParent();
 
@@ -427,7 +433,8 @@ public class TestSolrCLIRunExample extends SolrTestCaseJ4 {
         new String[] {
           "--example", "cloud",
           "--server-dir", solrServerDir.toString(),
-          "--example-dir", solrExampleDir.toString()
+          "--example-dir", solrExampleDir.toString(),
+          "--solr-home", exampleSolrHome.toString()
         };
 
     int bindPort = pickFreePort();
@@ -501,7 +508,7 @@ public class TestSolrCLIRunExample extends SolrTestCaseJ4 {
       }
     }
 
-    Path node1SolrHome = solrExampleDir.resolve("cloud/node1/solr");
+    Path node1SolrHome = exampleSolrHome.resolve("node1/solr");
     if (!Files.isDirectory(node1SolrHome)) {
       fail(node1SolrHome + " not found! run cloud example failed; tool output: " + toolOutput);
     }
@@ -547,6 +554,8 @@ public class TestSolrCLIRunExample extends SolrTestCaseJ4 {
           solrServerDir.toString(),
           "--example-dir",
           solrExampleDir.toString(),
+          "--solr-home",
+          createTempDir().toString(),
           "--script-inputs",
           scriptInputsValue
         };
@@ -658,6 +667,38 @@ public class TestSolrCLIRunExample extends SolrTestCaseJ4 {
     RunExampleTool tool = new RunExampleTool(executor, System.in, runtime);
     int code = runTool(tool, toolArgs);
     assertEquals("Execution should have failed with return code 1", 1, code);
+  }
+
+  @Test
+  public void testExamplesDefaultToTheTempDirectory() throws Exception {
+    Path serverDir = createTestServerDir();
+    Files.createDirectories(serverDir.resolve("solr"));
+    Files.writeString(serverDir.resolve("solr").resolve("solr.xml"), "<solr/>");
+    Files.writeString(serverDir.resolve("solr").resolve("zoo.cfg"), "");
+    Files.createDirectories(serverDir.getParent().resolve("example"));
+    Path examplesRoot = Path.of(System.getProperty("java.io.tmpdir")).resolve("solr-example");
+
+    RunExampleTool tool =
+        new RunExampleTool(null, System.in, new CLITestHelper.TestingRuntime(false));
+    tool.initDirs(serverDir.toString(), null, null, null, "techproducts");
+    assertEquals(
+        examplesRoot.resolve("techproducts").resolve("solr").toString(),
+        tool.solrHomeDir.toString());
+    assertTrue(Files.isRegularFile(tool.solrHomeDir.resolve("solr.xml")));
+    if (System.getenv("SOLR_LOGS_DIR") == null) {
+      assertEquals(
+          examplesRoot.resolve("techproducts").resolve("logs").toString(),
+          tool.nodeEnvironment(tool.solrHomeDir, false).get("SOLR_LOGS_DIR"));
+    }
+
+    tool = new RunExampleTool(null, System.in, new CLITestHelper.TestingRuntime(false));
+    tool.initDirs(serverDir.toString(), null, null, null, "cloud");
+    assertEquals(examplesRoot.resolve("cloud").toString(), tool.solrHomeDir.toString());
+
+    Path explicitHome = createTempDir();
+    tool = new RunExampleTool(null, System.in, new CLITestHelper.TestingRuntime(false));
+    tool.initDirs(serverDir.toString(), null, null, explicitHome.toString(), "techproducts");
+    assertEquals(explicitHome.toString(), tool.solrHomeDir.toString());
   }
 
   @Test
