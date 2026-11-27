@@ -1870,8 +1870,11 @@ public class RunExampleTool extends ToolBase {
       }
     }
     Path nodeDir = nodeSolrHome.toAbsolutePath().getParent();
-    env.putIfAbsent("SOLR_LOGS_DIR", nodeDir.resolve("logs").toString());
-    if (!env.containsKey("SOLR_PID_DIR")) {
+    if (env.getOrDefault("SOLR_LOGS_DIR", "").isBlank()) {
+      env.put("SOLR_LOGS_DIR", nodeDir.resolve("logs").toString());
+    }
+    if (env.getOrDefault("SOLR_PID_DIR", "").isBlank()) {
+      env.remove("SOLR_PID_DIR");
       Path defaultPidDir =
           Path.of(
               EnvUtils.getProperty(
